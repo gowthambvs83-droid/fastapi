@@ -1,0 +1,47 @@
+[
+  {
+    "url": "https://medium.com/algomart/working-with-pydantic-v2-the-best-practices-i-wish-i-had-known-earlier-83da3aa4d17a",
+    "name": "Working With Pydantic v2: The Best Practices I Wish I Had Known",
+    "snippet": "Working With Pydantic v2: The Best Practices I Wish I Had Known Earlier · 1. Start With Strong Types, Even if It Feels Tedious · 2. Validate Data ...",
+    "host_name": "medium.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=M81pfi64eeM",
+    "name": "Python Pydantic Tutorial: Complete Data Validation Course (Used",
+    "snippet": "In this video, we'll be learning how to use Pydantic, Python's most popular data validation library. Pydantic uses type hints to validate ...",
+    "host_name": "www.youtube.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.reddit.com/r/FastAPI/comments/1pzk3n7/fastapi_pydantic_v2_is_anyone_else_using_it_to",
+    "name": "FastAPI + Pydantic V2: Is anyone else using it to build AI  - Reddit",
+    "snippet": "Best practices for Pydantic V2 in FastAPI ... FastAPI production architecture: modular design and dependency injection best practices.",
+    "host_name": "www.reddit.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.kevsrobots.com/learn/pydantic/11_performance_optimization_tips.html",
+    "name": "Pydantic Best Practices for FastAPI Applications",
+    "snippet": "Explore best practices in using Pydantic with FastAPI to enhance code quality, maintainability, and performance of your web applications.",
+    "host_name": "www.kevsrobots.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://auth0.com/blog/fastapi-best-practices",
+    "name": "FastAPI Best Practices - Auth0",
+    "snippet": "One of FastAPI's most powerful features is its deep integration with Pydantic. Pydantic provides runtime type validation and data parsing based ...",
+    "host_name": "auth0.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  }
+]

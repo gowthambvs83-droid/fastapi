@@ -1,0 +1,47 @@
+[
+  {
+    "url": "https://dev-faizan.medium.com/building-real-time-applications-with-fastapi-websockets-a-complete-guide-2025-40f29d327733",
+    "name": "Building Real-Time Applications with FastAPI WebSockets",
+    "snippet": "In this guide, you'll build: A functional WebSocket server with FastAPI; Real-time bidirectional communication; A complete chat application ...",
+    "host_name": "dev-faizan.medium.com",
+    "rank": 0,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.facebook.com/groups/387281181699894/posts/2564453670649290",
+    "name": "Building real-time chat with FastAPI and WebSockets - Facebook",
+    "snippet": "In this tutorial, we'll show you how to create a real-time chat application using FastAPI and WebSockets — perfect for modern interactive ...",
+    "host_name": "www.facebook.com",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://python.plainenglish.io/building-a-real-time-chat-app-backend-with-python-and-fastapi-83af81ecec70",
+    "name": "Building a Real-Time Chat App Backend with Python and FastAPI",
+    "snippet": "Here's a step-by-step breakdown of how I built a production-ready real-time chat backend using FastAPI, WebSockets, JWT authentication, and ...",
+    "host_name": "python.plainenglish.io",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.youtube.com/watch?v=uCCEasljr74",
+    "name": "Build a Secure WebSocket System in Python - YouTube",
+    "snippet": "a similar system for my Portfolio RAGLLM application, which uses the same project ... Building A Simple WebSocket Chat Application With FastAPI ...",
+    "host_name": "www.youtube.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://fastapi.tiangolo.com/advanced/websockets",
+    "name": "WebSockets - FastAPI",
+    "snippet": "The app above is a minimal and simple example to demonstrate how to handle and broadcast messages to several WebSocket connections.",
+    "host_name": "fastapi.tiangolo.com",
+    "rank": 4,
+    "date": "",
+    "favicon": ""
+  }
+]
