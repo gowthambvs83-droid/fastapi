@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { modules, projects, type Module, type Topic, type Project, totalTopics } from '@/lib/curriculum';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { modules, projects, type Module, type Topic, type Project, type Section, type CodeExample } from '@/lib/curriculum';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,10 +10,12 @@ import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { VisualizationBlock } from '@/components/visualizations';
 import {
   ChevronDown, ChevronRight, CheckCircle2, Circle, Code2, Copy, Check,
   Menu, BookOpen, Rocket, Trophy, Lightbulb, Terminal, Eye,
-  FolderOpen, Zap, GraduationCap, Star, ArrowRight, Home
+  FolderOpen, Zap, GraduationCap, Star, ArrowRight, Home,
+  AlertTriangle, KeyRound, BookMarked
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -63,32 +64,107 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function CodeBlock({ code, language = 'python' }: { code: string; language?: string }) {
+function CodeBlock({ example }: { example: CodeExample }) {
+  const lang = example.language || 'python';
   return (
-    <div className="relative group rounded-lg overflow-hidden my-4 border border-gray-800">
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 border-b border-gray-800">
-        <Terminal className="h-3.5 w-3.5 text-gray-500" />
-        <span className="text-xs text-gray-500 font-mono">{language}</span>
+    <div className="my-4">
+      {example.title && (
+        <div className="flex items-center gap-2 mb-2">
+          <Code2 className="h-4 w-4 text-teal-500" />
+          <span className="text-sm font-semibold text-foreground">{example.title}</span>
+        </div>
+      )}
+      {example.description && (
+        <p className="text-sm text-muted-foreground mb-2">{example.description}</p>
+      )}
+      <div className="relative group rounded-lg overflow-hidden border border-gray-800">
+        <div className="flex items-center gap-2 px-4 py-2 bg-gray-900 border-b border-gray-800">
+          <Terminal className="h-3.5 w-3.5 text-gray-500" />
+          <span className="text-xs text-gray-500 font-mono">{lang}</span>
+        </div>
+        <CopyButton text={example.code} />
+        <SyntaxHighlighter language={lang} style={oneDark} customStyle={{ margin: 0, padding: '1rem', fontSize: '0.8125rem', background: '#1a1b26' }} showLineNumbers>
+          {example.code.trim()}
+        </SyntaxHighlighter>
       </div>
-      <CopyButton text={code} />
-      <SyntaxHighlighter language={language} style={oneDark} customStyle={{ margin: 0, padding: '1rem', fontSize: '0.8125rem', background: '#1a1b26' }} showLineNumbers>
-        {code.trim()}
-      </SyntaxHighlighter>
+      {example.output && (
+        <div className="relative group rounded-lg overflow-hidden mt-2 border border-emerald-900/40">
+          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-950/50 border-b border-emerald-900/40">
+            <Eye className="h-3.5 w-3.5 text-emerald-500" />
+            <span className="text-xs text-emerald-600 font-mono">Output</span>
+          </div>
+          <CopyButton text={example.output} />
+          <SyntaxHighlighter language="bash" style={oneDark} customStyle={{ margin: 0, padding: '1rem', fontSize: '0.8125rem', background: '#0d1117' }}>
+            {example.output.trim()}
+          </SyntaxHighlighter>
+        </div>
+      )}
     </div>
   );
 }
 
-function OutputBlock({ output }: { output: string }) {
+function SectionBlock({ section, index }: { section: Section; index: number }) {
   return (
-    <div className="relative group rounded-lg overflow-hidden my-4 border border-emerald-900/40">
-      <div className="flex items-center gap-2 px-4 py-2 bg-emerald-950/50 border-b border-emerald-900/40">
-        <Eye className="h-3.5 w-3.5 text-emerald-500" />
-        <span className="text-xs text-emerald-600 font-mono">Output</span>
+    <div className="mb-8">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-8 h-8 rounded-lg bg-teal-500/10 flex items-center justify-center text-sm font-bold text-teal-600 dark:text-teal-400 shrink-0">
+          {index + 1}
+        </div>
+        <h2 className="text-xl font-bold text-foreground">{section.heading}</h2>
       </div>
-      <CopyButton text={output} />
-      <SyntaxHighlighter language="bash" style={oneDark} customStyle={{ margin: 0, padding: '1rem', fontSize: '0.8125rem', background: '#0d1117' }}>
-        {output.trim()}
-      </SyntaxHighlighter>
+
+      <div className="pl-11 space-y-4">
+        <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-li:leading-relaxed">
+          <ReactMarkdown>{section.content}</ReactMarkdown>
+        </div>
+
+        {section.visualization && (
+          <VisualizationBlock visualization={section.visualization} />
+        )}
+
+        {section.codeExamples && section.codeExamples.map((ex, i) => (
+          <CodeBlock key={i} example={ex} />
+        ))}
+
+        {section.warning && (
+          <Card className="border-red-500/30 bg-red-500/5">
+            <CardContent className="p-4 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700 dark:text-red-300">{section.warning}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {section.tips && section.tips.length > 0 && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <Lightbulb className="h-4 w-4" /> Pro Tips
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {section.tips.map((tip, i) => (
+                <p key={i} className="text-sm text-amber-700 dark:text-amber-300 flex gap-2">
+                  <Zap className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+                  <span>{tip}</span>
+                </p>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {section.keyTakeaway && (
+          <Card className="border-teal-500/30 bg-teal-500/5">
+            <CardContent className="p-4 flex items-start gap-3">
+              <KeyRound className="h-5 w-5 text-teal-500 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-sm font-semibold text-teal-700 dark:text-teal-300">Key Takeaway: </span>
+                <span className="text-sm text-teal-600 dark:text-teal-400">{section.keyTakeaway}</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
@@ -98,38 +174,22 @@ function TopicContent({ topic, isCompleted, onToggleComplete }: { topic: Topic; 
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">{topic.title}</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">{topic.icon && <span className="mr-2">{topic.icon}</span>}{topic.title}</h1>
         </div>
         <Button variant={isCompleted ? "default" : "outline"} size="sm" onClick={onToggleComplete} className="shrink-0 gap-1.5">
           {isCompleted ? <><CheckCircle2 className="h-4 w-4" /> Done</> : <><Circle className="h-4 w-4" /> Mark Done</>}
         </Button>
       </div>
 
-      <div className="prose prose-slate dark:prose-invert max-w-none">
-        <ReactMarkdown>{topic.content}</ReactMarkdown>
+      <div className="prose prose-slate dark:prose-invert max-w-none prose-p:leading-relaxed">
+        <ReactMarkdown>{topic.introduction}</ReactMarkdown>
       </div>
 
-      {topic.code && <CodeBlock code={topic.code} />}
+      <Separator />
 
-      {topic.output && <OutputBlock output={topic.output} />}
-
-      {topic.tips && topic.tips.length > 0 && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2 text-amber-600 dark:text-amber-400">
-              <Lightbulb className="h-5 w-5" /> Pro Tips
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {topic.tips.map((tip, i) => (
-              <p key={i} className="text-sm text-amber-700 dark:text-amber-300 flex gap-2">
-                <Zap className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
-                <span>{tip}</span>
-              </p>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      {topic.sections.map((section, i) => (
+        <SectionBlock key={i} section={section} index={i} />
+      ))}
     </div>
   );
 }
@@ -157,14 +217,16 @@ function ProjectContent({ project }: { project: Project }) {
         ))}
       </div>
 
-      <div className="prose prose-slate dark:prose-invert max-w-none">
-        <ReactMarkdown>{project.content}</ReactMarkdown>
-      </div>
+      <Separator />
 
-      <CodeBlock code={project.code} />
+      {project.sections.map((section, i) => (
+        <SectionBlock key={i} section={section} index={i} />
+      ))}
     </div>
   );
 }
+
+const totalTopicsCount = modules.reduce((s, m) => s + m.topics.length, 0);
 
 function SidebarContent({ view, setView, progress, expandedModules, toggleModule }: {
   view: ViewState;
@@ -187,13 +249,13 @@ function SidebarContent({ view, setView, progress, expandedModules, toggleModule
 
       <div className="p-3 border-b border-border">
         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-          <span>{progress.count} of {totalTopics} completed</span>
-          <span>{Math.round((progress.count / totalTopics) * 100)}%</span>
+          <span>{progress.count} of {totalTopicsCount} completed</span>
+          <span>{Math.round((progress.count / totalTopicsCount) * 100)}%</span>
         </div>
-        <Progress value={(progress.count / totalTopics) * 100} className="h-2" />
+        <Progress value={(progress.count / totalTopicsCount) * 100} className="h-2" />
       </div>
 
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         <div className="p-2 space-y-1">
           <button onClick={() => setView({ type: 'home' })} className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-sm transition-colors ${view.type === 'home' ? 'bg-accent text-accent-foreground font-medium' : 'hover:bg-accent/50 text-muted-foreground'}`}>
             <Home className="h-4 w-4" /> Dashboard
@@ -247,7 +309,7 @@ function SidebarContent({ view, setView, progress, expandedModules, toggleModule
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -263,22 +325,22 @@ function HomePage({ setView, progress }: { setView: (v: ViewState) => void; prog
             <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center text-2xl">⚡</div>
             <div>
               <h1 className="text-3xl md:text-4xl font-bold">FastAPI Mastery</h1>
-              <p className="text-teal-100 text-sm">Zero → Production Ready</p>
+              <p className="text-teal-100 text-sm">Zero → Production Ready Engineer</p>
             </div>
           </div>
           <p className="text-teal-100 max-w-2xl text-base md:text-lg leading-relaxed mb-6">
-            The complete guide to building real-world APIs with Python. From your first endpoint to production deployment — 
-            Pydantic V2, authentication, databases, WebSocket, Docker, and 5 hands-on projects.
+            The most comprehensive FastAPI tutorial ever built. From absolute beginner to writing production-ready code
+            independently — with deep-dive explanations, visual diagrams, multiple code examples per concept, and 5 hands-on projects.
           </p>
           <div className="flex flex-wrap gap-3 mb-6">
-            <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">🛡️ Pydantic V2</Badge>
+            <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">🛡️ Pydantic V2 Deep-Dive</Badge>
             <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">🔐 JWT Auth</Badge>
             <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">🗄️ SQLAlchemy</Badge>
             <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">💬 WebSocket</Badge>
             <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">🚢 Docker</Badge>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <span className="font-semibold">{totalTopics} topics</span>
+            <span className="font-semibold">{totalTopicsCount} topics</span>
             <span className="text-teal-200">•</span>
             <span className="font-semibold">3 mini projects</span>
             <span className="text-teal-200">•</span>
@@ -294,10 +356,10 @@ function HomePage({ setView, progress }: { setView: (v: ViewState) => void; prog
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between text-sm text-muted-foreground mb-2">
-            <span>{progress.count} of {totalTopics} topics completed</span>
-            <span className="font-semibold text-foreground">{Math.round((progress.count / totalTopics) * 100)}%</span>
+            <span>{progress.count} of {totalTopicsCount} topics completed</span>
+            <span className="font-semibold text-foreground">{Math.round((progress.count / totalTopicsCount) * 100)}%</span>
           </div>
-          <Progress value={(progress.count / totalTopics) * 100} className="h-3 mb-4" />
+          <Progress value={(progress.count / totalTopicsCount) * 100} className="h-3 mb-4" />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="text-center p-3 rounded-lg bg-teal-500/10 border border-teal-500/20">
               <div className="text-2xl font-bold text-teal-600 dark:text-teal-400">{modules.length}</div>
@@ -416,6 +478,7 @@ export default function FastAPITutorial() {
   const [view, setView] = useState<ViewState>({ type: 'home' });
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const progress = useProgress();
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const toggleModule = useCallback((id: string) => {
     setExpandedModules(prev => {
@@ -430,6 +493,10 @@ export default function FastAPITutorial() {
     if (v.type === 'topic') {
       setExpandedModules(prev => new Set([...prev, v.module.id]));
     }
+    // Scroll to top of content area
+    setTimeout(() => {
+      contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
   }, []);
 
   const currentModule = view.type === 'topic' ? view.module : null;
@@ -504,8 +571,8 @@ export default function FastAPITutorial() {
           </div>
         </header>
 
-        {/* Content Area */}
-        <ScrollArea className="flex-1">
+        {/* Content Area - using native scroll instead of ScrollArea for reliability */}
+        <div ref={contentRef} className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10">
             {view.type === 'home' && <HomePage setView={handleSetView} progress={progress} />}
 
@@ -531,7 +598,7 @@ export default function FastAPITutorial() {
               <ProjectContent project={(view as any).project} />
             )}
           </div>
-        </ScrollArea>
+        </div>
       </main>
     </div>
   );
