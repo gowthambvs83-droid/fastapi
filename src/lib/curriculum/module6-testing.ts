@@ -333,7 +333,7 @@ def test_response_has_correct_headers():
             'Test multiple validation errors simultaneously to ensure FastAPI reports all issues, not just the first one.',
           ],
           keyTakeaway:
-            'Test validation errors as rigorously as happy paths — your Pydantic models are contracts, and tests prove they\'
+            'Test validation errors as rigorously as happy paths — your Pydantic models are contracts, and tests prove they hold up under invalid input.',
           realWorldAnalogy: `Testing validation is like quality control on an assembly line. You deliberately send defective products (invalid data) through the line to verify the inspection station (Pydantic) catches every type of defect and produces the correct rejection report (422 error).`,
           commonMistake: [
             {
@@ -358,7 +358,7 @@ def test_response_has_correct_headers():
           proTips: [
             `Create a helper: assert_validation_error(res, field="age", error_type="greater_than_equal") to reduce boilerplate across tests.`,
             `Test boundary values: Field(ge=0) should accept 0 and reject -1. Field(max_length=100) should accept 100 chars and reject 101.`,
-          ],re enforced.',
+          ],
         },
       ],
     },
@@ -649,7 +649,7 @@ def test_override_external_service(authenticated_client):
             'Override external service dependencies (payment APIs, email services) with mocks to avoid network calls in tests.',
           ],
           keyTakeaway:
-            'dependency_overrides is FastAPI\'
+            'dependency_overrides is FastAPI\'s testing superpower — it replaces production dependencies with test doubles without changing a single line of application code.',
           realWorldAnalogy: `Dependency overrides are like stunt doubles in movies. The real actor (production dependency) does the dramatic scenes, but for dangerous stunts (tests that need isolation), a trained stunt double (test dependency) takes their place. The camera (endpoint) can't tell the difference.`,
           commonMistake: [
             {
@@ -674,7 +674,8 @@ def test_override_external_service(authenticated_client):
           proTips: [
             `Always clear dependency_overrides after tests: app.dependency_overrides.clear(). Forgetting this causes test contamination.`,
             `Create a fixture that provides an authenticated TestClient to reduce boilerplate in protected endpoint tests.`,
-          ],s secret weapon for testing — replace any dependency with a test double for fast, isolated, deterministic tests.',
+          ],
+          keyTakeaway: 'dependency_overrides is FastAPI\'s secret weapon for testing — replace any dependency with a test double for fast, isolated, deterministic tests.',
         },
       ],
     },

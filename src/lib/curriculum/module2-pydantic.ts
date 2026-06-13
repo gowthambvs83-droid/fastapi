@@ -183,7 +183,7 @@ except ValidationError as e:
             'V2 error messages use a different format than V1 — they include type, loc, msg, and input fields for programmatic error handling.',
           ],
           keyTakeaway:
-            'Pydantic V2\'
+            'Pydantic V2\'s Rust-powered core delivers 5-50x faster validation while keeping the same Python API — your existing code works with minimal changes but runs dramatically faster.',
           realWorldAnalogy: `Pydantic V2's Rust core is like replacing a bicycle courier (Python validation) with a high-speed train (Rust validation). The destination is the same — validated data — but the train gets there 5-50x faster. You still buy the same ticket (use the same Python API), but the journey is dramatically quicker.`,
           commonMistake: [
             {
@@ -208,7 +208,7 @@ except ValidationError as e:
           proTips: [
             `Use model_validate_json() instead of json.loads() + model_validate(). The Rust engine handles both parsing and validation in a single optimized pass.`,
             `The V2 migration guide at docs.pydantic.dev/latest/migration/ covers every API change. Most projects migrate in under an hour.`,
-          ],s Rust core makes validation 5-50x faster — you write the same Python API, but the execution is native-speed.',
+          ],
         },
         {
           heading: 'The Pydantic V2 Validation Pipeline',

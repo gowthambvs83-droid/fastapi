@@ -666,7 +666,7 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db_with_transacti
             'Yield dependencies execute teardown in reverse order when nested — outer dependencies clean up last.',
           ],
           keyTakeaway:
-            'Yield dependencies are FastAPI\'
+            'Yield dependencies are FastAPI\'s resource management pattern — they guarantee cleanup code runs even when exceptions occur, making them perfect for database sessions and file handles.',
           realWorldAnalogy: `Yield dependencies are like checking out a library book. The library gives you the book (yield), you read it (your endpoint runs), and when you're done, you return it (code after yield runs). Even if you spill coffee on the book and panic (exception), the library still makes you return it (finally block guarantees cleanup).`,
           commonMistake: [
             {
@@ -691,7 +691,7 @@ def create_order(order: OrderCreate, db: Session = Depends(get_db_with_transacti
           proTips: [
             `The auto-commit/rollback pattern in yield dependencies is elegant but surprising — document it clearly so teammates understand why they don't need explicit commits.`,
             `Yield dependencies execute teardown in reverse order when nested. If A yields then B yields, B cleans up first, then A.`,
-          ],s answer to context managers — setup before the request, guaranteed cleanup after.',
+          ],
         },
         {
           heading: 'Dependency Chains & Class Dependencies',

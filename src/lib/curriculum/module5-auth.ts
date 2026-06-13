@@ -591,7 +591,7 @@ async def read_own_items(current_user: dict = Depends(get_current_user)):
             'Always return the correct response shape: {"access_token": "...", "token_type": "bearer"} — Swagger UI expects this exact format.',
           ],
           keyTakeaway:
-            'OAuth2PasswordRequestForm parses form-data credentials — it makes Swagger UI\'
+            'OAuth2PasswordRequestForm parses form-data credentials — it makes Swagger UI\'s Authorize button work automatically with zero extra configuration.',
           realWorldAnalogy: `OAuth2PasswordRequestForm is like a standardized job application form. Every company uses the same format — name, address, phone number — so applicants know exactly what to fill in. The OAuth2 spec standardizes the token request format so every OAuth2 client knows how to send credentials.`,
           commonMistake: [
             {
@@ -616,7 +616,7 @@ async def read_own_items(current_user: dict = Depends(get_current_user)):
           proTips: [
             `The OAuth2PasswordRequestForm makes Swagger UI's Authorize button work out of the box — always use it for token endpoints.`,
             `Return the correct response shape: {"access_token": "...", "token_type": "bearer"}. Swagger UI expects this exact format.`,
-          ],s Authorize button work automatically.',
+          ],
         },
         {
           heading: 'Swagger Authorize Button Integration',
@@ -843,7 +843,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             'The deprecated="auto" setting in CryptContext automatically upgrades hashes to the latest scheme when a user logs in.',
           ],
           keyTakeaway:
-            'Always hash passwords with bcrypt via passlib — it\'
+            'Always hash passwords with bcrypt via passlib — it\'s the industry standard that handles salting and adaptive cost automatically.',
           realWorldAnalogy: `Password hashing is like a meat grinder — you can turn a steak into ground beef in seconds, but you can never turn ground beef back into a steak. When a user registers, you grind their password (hash it) and store the ground beef. When they login, you grind the submitted password and compare it to the stored ground beef. If they match, the password is correct.`,
           commonMistake: [
             {
@@ -868,7 +868,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
           proTips: [
             `Use bcrypt__rounds=12 as a good balance between security and performance. Each increment doubles computation time.`,
             `Set deprecated="auto" in CryptContext to automatically upgrade hashes when users log in. This enables lazy migration from old hash algorithms.`,
-          ],s deliberately slow to compute, making brute-force attacks impractical.',
+          ],
+          keyTakeaway: 'Bcrypt hashing is the gold standard for passwords — it\'s deliberately slow to compute, making brute-force attacks impractical.',
         },
         {
           heading: 'Security Best Practices for Password Handling',
