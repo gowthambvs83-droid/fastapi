@@ -120,3 +120,114 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ─── Simulation Animation Keyframes ─────────────────────────── */
+
+@keyframes sim-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sim-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes sim-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes sim-bounce {
+  0% {
+    transform: scale(0.9);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes sim-glow {
+  0%, 100% {
+    box-shadow: 0 0 4px 0 rgba(20, 184, 166, 0);
+  }
+  50% {
+    box-shadow: 0 0 16px 4px rgba(20, 184, 166, 0.4);
+  }
+}
+
+.sim-fade-in {
+  animation: sim-fade-in 0.3s ease-out;
+}
+
+.sim-slide-right {
+  animation: sim-slide-right 0.35s ease-out;
+}
+
+.sim-pulse {
+  animation: sim-pulse 1.5s ease-in-out infinite;
+}
+
+.sim-bounce {
+  animation: sim-bounce 0.4s ease-out;
+}
+
+.sim-glow {
+  animation: sim-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes sim-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sim-slide-down {
+  animation: sim-slide-down 0.5s ease-out both;
+}
+
+/* Thin scrollbar for code blocks */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.3) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.3);
+  border-radius: 3px;
+}

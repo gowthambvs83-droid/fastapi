@@ -278,7 +278,7 @@ function TopicContent({ topic, isCompleted, onToggleComplete }: { topic: Topic; 
       <Separator />
 
       {topic.simulation && (
-        <SimulationEngine simulation={topic.simulation} />
+        <SimulationEngine simulationType={topic.simulation} />
       )}
 
       {topic.sections.map((section, i) => (
@@ -287,7 +287,7 @@ function TopicContent({ topic, isCompleted, onToggleComplete }: { topic: Topic; 
 
       {topic.frontendIntegration && (
         <div className="mt-6">
-          <FrontendExample example={topic.frontendIntegration} />
+          <FrontendExample frontendIntegration={topic.frontendIntegration} />
         </div>
       )}
     </div>

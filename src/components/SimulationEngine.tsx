@@ -2,462 +2,1170 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SimulationType } from '@/lib/curriculum/types';
-import {
-  Play,
-  Pause,
-  RotateCcw,
-  Globe,
-  Server,
-  Database,
-  Shield,
-  Zap,
-  Users,
-  Lock,
-  Unlock,
-  ArrowRight,
-  X,
-  ChevronRight,
-  Monitor,
-  Wifi,
-  Layers,
-} from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-interface LogEntry {
-  id: number;
-  timestamp: number;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-}
-
-interface SimNodeData {
+interface SimStep {
   id: string;
   label: string;
-  icon: React.ReactNode;
+  description: string;
   detail: string;
-  timing?: string;
 }
 
-interface SimStep {
-  node: SimNodeData;
-  logMessage: string;
-  logType: LogEntry['type'];
+interface SimulationConfig {
+  title: string;
+  description: string;
+  steps: SimStep[];
+  stepDelay: number;
+  layout: 'horizontal' | 'vertical' | 'hub-spoke';
 }
 
 // ─── Simulation Configurations ───────────────────────────────────────
 
-const HTTP_NODES: SimStep[] = [
-  {
-    node: {
-      id: 'browser',
-      label: 'Browser',
-      icon: <Monitor className="h-4 w-4" />,
-      detail: 'User initiates an HTTP GET request to api.example.com/users. The browser checks its cache, then begins DNS resolution.',
-      timing: '0ms',
-    },
-    logMessage: 'Browser sends HTTP GET /users',
-    logType: 'info',
+const SIMULATION_CONFIGS: Record<SimulationType, SimulationConfig> = {
+  HTTP_REQUEST_FLOW: {
+    title: 'HTTP Request Flow',
+    description:
+      'Watch an HTTP request travel from the client through DNS, the server, middleware, and route validation to the handler and back.',
+    stepDelay: 1400,
+    layout: 'horizontal',
+    steps: [
+      {
+        id: 'client',
+        label: 'Client',
+        description: 'Request initiated',
+        detail:
+          'User initiates an HTTP GET request to api.example.com/users. The browser checks its cache and prepares the request with headers (Accept, User-Agent, etc.).',
+      },
+      {
+        id: 'dns',
+        label: 'DNS',
+        description: 'DNS resolution',
+        detail:
+          'DNS resolves api.example.com to IP 203.0.113.42. The browser first checks its local cache, then queries the recursive resolver, which contacts the authoritative nameserver.',
+      },
+      {
+        id: 'server',
+        label: 'Server',
+        description: 'Server receives request',
+        detail:
+          'The server (Uvicorn) accepts the TCP connection. TLS handshake completes if HTTPS. The raw HTTP bytes are received and parsed into a request object.',
+      },
+      {
+        id: 'middleware',
+        label: 'Middleware',
+        description: 'Middleware processing',
+        detail:
+          'CORS, authentication, rate limiting, and logging middleware run in sequence. Each can short-circuit the request or modify it before passing it along.',
+      },
+      {
+        id: 'route',
+        label: 'Router',
+        description: 'Route matching',
+        detail:
+          'FastAPI\'s router matches the URL path "/users" and HTTP method GET to the registered route handler. Path and query parameters are extracted.',
+      },
+      {
+        id: 'validation',
+        label: 'Validation',
+        description: 'Request validation',
+        detail:
+          'Pydantic validates query parameters, headers, and request body against the declared types. Invalid data triggers an automatic 422 response.',
+      },
+      {
+        id: 'handler',
+        label: 'Handler',
+        description: 'Business logic',
+        detail:
+          'The route handler executes business logic — querying the database, applying filters, and processing the result. Dependencies are injected via FastAPI\'s DI system.',
+      },
+      {
+        id: 'response',
+        label: 'Response',
+        description: 'Response returned',
+        detail:
+          'The handler returns data which is serialized to JSON by Pydantic. The response travels back through middleware, and the server sends HTTP 200 with the JSON body.',
+      },
+    ],
   },
-  {
-    node: {
-      id: 'dns',
-      label: 'DNS Resolver',
-      icon: <Globe className="h-4 w-4" />,
-      detail: 'DNS resolves api.example.com to IP 203.0.113.42. The browser first checks its local DNS cache, then queries the recursive resolver.',
-      timing: '2ms',
-    },
-    logMessage: 'DNS resolved api.example.com → 203.0.113.42',
-    logType: 'info',
-  },
-  {
-    node: {
-      id: 'lb',
-      label: 'Load Balancer',
-      icon: <Layers className="h-4 w-4" />,
-      detail: 'Nginx load balancer receives the request and selects worker-3 using least_conn algorithm. Adds X-Forwarded-For and X-Real-IP headers.',
-      timing: '1ms',
-    },
-    logMessage: 'Load balancer routed to worker-3 (least_conn)',
-    logType: 'info',
-  },
-  {
-    node: {
-      id: 'fastapi',
-      label: 'FastAPI Worker',
-      icon: <Server className="h-4 w-4" />,
-      detail: 'Uvicorn worker-3 processes the request. FastAPI validates path/query params, runs dependency injection, and executes the route handler.',
-      timing: '5ms',
-    },
-    logMessage: 'FastAPI handler get_users() invoked',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'db',
-      label: 'Database',
-      icon: <Database className="h-4 w-4" />,
-      detail: 'SQLAlchemy executes "SELECT * FROM users WHERE active=true" via connection pool. PostgreSQL uses index scan on idx_users_active.',
-      timing: '15ms',
-    },
-    logMessage: 'DB query returned 42 rows in 15ms',
-    logType: 'success',
-  },
-];
 
-const JWT_STEPS: SimStep[] = [
-  {
-    node: {
-      id: 'login',
-      label: 'User Logs In',
-      icon: <Users className="h-4 w-4" />,
-      detail: 'User submits credentials (email + password) via POST /auth/login over HTTPS.',
-    },
-    logMessage: 'POST /auth/login — credentials received',
-    logType: 'info',
+  JWT_LIFECYCLE: {
+    title: 'JWT Lifecycle',
+    description:
+      'Follow the complete lifecycle of a JWT token — from user login, through token creation and storage, to verification and access control.',
+    stepDelay: 1600,
+    layout: 'vertical',
+    steps: [
+      {
+        id: 'login',
+        label: 'User Login',
+        description: 'Credentials submitted',
+        detail:
+          'User submits email and password via POST /auth/login over HTTPS. The request body contains { "email": "user@example.com", "password": "••••••••" }.',
+      },
+      {
+        id: 'create-jwt',
+        label: 'Server Creates JWT',
+        description: 'Token generated & signed',
+        detail:
+          'Server verifies credentials against the database, then creates a JWT with HS256. Payload: { sub: "user_42", role: "admin", exp: now+3600 }. Signed with the server secret.',
+      },
+      {
+        id: 'store-token',
+        label: 'Client Stores Token',
+        description: 'Token saved client-side',
+        detail:
+          'Client receives the JWT in the response body and stores it — typically in memory or a secure httpOnly cookie. The token is now available for subsequent authenticated requests.',
+      },
+      {
+        id: 'bearer-request',
+        label: 'Request with Bearer Token',
+        description: 'Authenticated request sent',
+        detail:
+          'Client sends a new request to a protected endpoint with the header: Authorization: Bearer eyJhbGciOiJIUzI1NiIs... The token travels with every subsequent request.',
+      },
+      {
+        id: 'verify-jwt',
+        label: 'Server Verifies JWT',
+        description: 'Signature & claims validated',
+        detail:
+          'Server extracts the token, verifies the HMAC-SHA256 signature using the secret key, checks the exp claim for expiration, and validates the sub and role claims.',
+      },
+      {
+        id: 'access-granted',
+        label: 'Access Granted',
+        description: 'Request authorized ✓',
+        detail:
+          'Token is valid! The user identity (user_42, admin role) is injected into the request context via FastAPI dependency injection. The protected handler processes the request.',
+      },
+      {
+        id: 'access-denied',
+        label: 'Access Denied',
+        description: 'Invalid or expired token ✗',
+        detail:
+          'If the token is expired, tampered with, or the signature is invalid, the server returns 401 Unauthorized. The client must re-authenticate to get a new token.',
+      },
+    ],
   },
-  {
-    node: {
-      id: 'create-jwt',
-      label: 'Server Creates JWT',
-      icon: <Lock className="h-4 w-4" />,
-      detail: 'Server verifies credentials, then signs a JWT with HS256. Payload contains {sub: user_id, exp: now+1h, role: "admin"}.',
-    },
-    logMessage: 'JWT signed with HS256 — exp: 3600s',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'send-jwt',
-      label: 'JWT Sent to Client',
-      icon: <ArrowRight className="h-4 w-4" />,
-      detail: 'Server returns JWT in response body. Client extracts the token from the JSON response.',
-    },
-    logMessage: 'JWT delivered in response body',
-    logType: 'info',
-  },
-  {
-    node: {
-      id: 'store-jwt',
-      label: 'Client Stores JWT',
-      icon: <Shield className="h-4 w-4" />,
-      detail: 'Client stores the JWT in memory (or httpOnly cookie). The token is now available for subsequent requests.',
-    },
-    logMessage: 'JWT stored client-side',
-    logType: 'info',
-  },
-  {
-    node: {
-      id: 'use-jwt',
-      label: 'Next Request: JWT in Header',
-      icon: <Zap className="h-4 w-4" />,
-      detail: 'Client sends a new request with Authorization: Bearer <token> header attached.',
-    },
-    logMessage: 'GET /users — Authorization header attached',
-    logType: 'info',
-  },
-  {
-    node: {
-      id: 'decode-jwt',
-      label: 'Server Decodes JWT',
-      icon: <Unlock className="h-4 w-4" />,
-      detail: 'Server verifies signature using secret key, checks exp claim, and extracts user_id from sub claim. Token is valid!',
-    },
-    logMessage: 'JWT verified — sub: user_42, role: admin',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'identified',
-      label: 'User Identified',
-      icon: <Users className="h-4 w-4" />,
-      detail: 'Request is authenticated. The route handler receives the current user object via dependency injection and processes the request.',
-    },
-    logMessage: 'User authenticated — request processed',
-    logType: 'success',
-  },
-];
 
-const DB_STEPS: SimStep[] = [
-  {
-    node: {
-      id: 'handler',
-      label: 'FastAPI Handler',
-      icon: <Server className="h-4 w-4" />,
-      detail: 'Route handler get_users() is called. Dependency injection provides the DB session.',
-      timing: '0ms',
-    },
-    logMessage: 'Handler get_users() invoked',
-    logType: 'info',
+  DATABASE_QUERY: {
+    title: 'Database Query Pipeline',
+    description:
+      'Trace a database query from the API handler through SQLAlchemy ORM, connection pool, and PostgreSQL to the final serialized response.',
+    stepDelay: 1200,
+    layout: 'horizontal',
+    steps: [
+      {
+        id: 'api-request',
+        label: 'API Request',
+        description: 'GET /users received',
+        detail:
+          'FastAPI receives GET /users. The route handler is called with an injected database session from the dependency injection system.',
+      },
+      {
+        id: 'session',
+        label: 'SQLAlchemy Session',
+        description: 'Session created',
+        detail:
+          'A new SQLAlchemy Session is created via the sessionmaker. The session manages the unit of work pattern and tracks object changes.',
+      },
+      {
+        id: 'query-build',
+        label: 'Query Construction',
+        description: 'ORM query built',
+        detail:
+          'db.execute(select(User).where(User.active == True)) — SQLAlchemy constructs the SQL from the ORM expression tree without hitting the database yet.',
+      },
+      {
+        id: 'db-execute',
+        label: 'Database Execution',
+        description: 'SQL executed',
+        detail:
+          'The constructed SQL "SELECT * FROM users WHERE active=true" is sent to PostgreSQL. The query planner chooses an Index Scan on idx_users_active.',
+      },
+      {
+        id: 'result-map',
+        label: 'Result Mapping',
+        description: 'Rows → Objects',
+        detail:
+          'SQLAlchemy maps the returned rows to ORM objects. 42 User instances are created and attached to the session identity map for uniqueness guarantees.',
+      },
+      {
+        id: 'response',
+        label: 'JSON Response',
+        description: '200 OK returned',
+        detail:
+          'Pydantic serializes the User objects with the response_model schema. FastAPI returns HTTP 200 with JSON body. Total handler time: ~20ms.',
+      },
+    ],
   },
-  {
-    node: {
-      id: 'orm',
-      label: 'SQLAlchemy ORM',
-      icon: <Layers className="h-4 w-4" />,
-      detail: 'db.execute(select(User).where(User.active == True)) — SQLAlchemy constructs the SQL query from the ORM expression.',
-      timing: '0.5ms',
-    },
-    logMessage: 'ORM generated: SELECT * FROM users WHERE active=true',
-    logType: 'info',
+
+  WEBSOCKET_FLOW: {
+    title: 'WebSocket Communication',
+    description:
+      'See how WebSocket connections are established and how messages flow bidirectionally between client and server in real time.',
+    stepDelay: 1400,
+    layout: 'hub-spoke',
+    steps: [
+      {
+        id: 'connect',
+        label: 'Client Connects',
+        description: 'WS connection initiated',
+        detail:
+          'Client creates a new WebSocket connection: new WebSocket("wss://api.example.com/ws"). The browser initiates the HTTP upgrade request.',
+      },
+      {
+        id: 'handshake',
+        label: 'Handshake',
+        description: 'Upgrade confirmed',
+        detail:
+          'Server receives the HTTP Upgrade request and responds with 101 Switching Protocols. The connection is now upgraded from HTTP to WebSocket. Full-duplex communication begins.',
+      },
+      {
+        id: 'message-exchange',
+        label: 'Message Exchange',
+        description: 'Bidirectional messages',
+        detail:
+          'Client sends: {"type": "chat", "content": "Hello!"}. Server receives, processes, and can push messages back at any time. No request-response cycle needed.',
+      },
+      {
+        id: 'broadcasting',
+        label: 'Broadcasting',
+        description: 'Message to all clients',
+        detail:
+          'Server broadcasts the message to all connected clients in the same room/channel. Each client receives: {"from": "user_42", "content": "Hello!"} in real time.',
+      },
+      {
+        id: 'disconnect',
+        label: 'Disconnect',
+        description: 'Connection closed',
+        detail:
+          'Either side can close the connection with a close frame (code 1000 for normal). The server cleans up resources and removes the client from the active connections list.',
+      },
+    ],
   },
-  {
-    node: {
-      id: 'pool',
-      label: 'Connection Pool',
-      icon: <Wifi className="h-4 w-4" />,
-      detail: 'Connection pool (size=10, max_overflow=5) provides connection #7 from the pool. Pool had 3 idle connections available.',
-      timing: '1ms',
-    },
-    logMessage: 'Connection #7 acquired from pool (3 idle)',
-    logType: 'info',
+
+  MIDDLEWARE_CHAIN: {
+    title: 'Middleware Chain',
+    description:
+      'Watch a request pass through middleware layers — CORS, Auth, Rate Limiting, and Logging — each can reject it before it reaches the handler.',
+    stepDelay: 1300,
+    layout: 'horizontal',
+    steps: [
+      {
+        id: 'request',
+        label: 'Request',
+        description: 'Incoming request',
+        detail:
+          'An HTTP request arrives at the FastAPI application. It carries headers like Origin, Authorization, and X-Forwarded-For that each middleware will inspect.',
+      },
+      {
+        id: 'cors',
+        label: 'CORS',
+        description: 'Origin check',
+        detail:
+          'CORS middleware checks the Origin header against the allowed origins list. Adds Access-Control-Allow-Origin, Allow-Methods, and Allow-Headers. Preflight OPTIONS requests are handled here. Can reject with 403.',
+      },
+      {
+        id: 'auth',
+        label: 'Auth',
+        description: 'Token verification',
+        detail:
+          'Authentication middleware extracts the JWT from the Authorization header, verifies the signature and expiration. If valid, injects the user identity into request.state. Can reject with 401.',
+      },
+      {
+        id: 'rate-limit',
+        label: 'Rate Limit',
+        description: 'Throttle check',
+        detail:
+          'Rate limiter checks the request count per client IP in a sliding window (100 req/min). Uses a Redis counter for distributed rate limiting. Can reject with 429 Too Many Requests.',
+      },
+      {
+        id: 'logging',
+        label: 'Logging',
+        description: 'Request logged',
+        detail:
+          'Logging middleware records the request method, path, client IP, and timestamp. Structured JSON logs are emitted for the observability pipeline (ELK, Datadog, etc.).',
+      },
+      {
+        id: 'handler',
+        label: 'Route Handler',
+        description: 'Business logic',
+        detail:
+          'All middleware checks passed! The route handler executes business logic and returns a response. The response travels back through the middleware chain in reverse order.',
+      },
+      {
+        id: 'response',
+        label: 'Response',
+        description: 'Response returned',
+        detail:
+          'The response passes back through logging (records status code + timing), rate limit (no-op), auth (no-op), and CORS (adds headers). The final HTTP response is sent to the client.',
+      },
+    ],
   },
-  {
-    node: {
-      id: 'postgres',
-      label: 'PostgreSQL',
-      icon: <Database className="h-4 w-4" />,
-      detail: 'PostgreSQL receives the query and uses the query planner to determine the optimal execution strategy.',
-      timing: '12ms',
-    },
-    logMessage: 'PostgreSQL executing query',
-    logType: 'info',
-  },
-  {
-    node: {
-      id: 'query-plan',
-      label: 'Query Plan',
-      icon: <Zap className="h-4 w-4" />,
-      detail: 'Planner chooses Index Scan using idx_users_active. Estimated cost: 4.20..15.80. Rows: 42. Actual time: 0.034..0.128.',
-      timing: '2ms',
-    },
-    logMessage: 'Index Scan on idx_users_active — cost 4.20',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'result-set',
-      label: 'Result Set',
-      icon: <Layers className="h-4 w-4" />,
-      detail: '42 rows returned. Each row contains: id, email, name, role, created_at, active. Total payload size: ~8KB.',
-      timing: '3ms',
-    },
-    logMessage: '42 rows fetched (8KB payload)',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'pydantic',
-      label: 'Pydantic Serialization',
-      icon: <Shield className="h-4 w-4" />,
-      detail: 'UserResponse schema validates and serializes each row. orm_mode=True maps ORM objects to dicts. Response model enforces output types.',
-      timing: '2ms',
-    },
-    logMessage: 'Pydantic serialized 42 UserResponse objects',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'json-response',
-      label: 'JSON Response',
-      icon: <Globe className="h-4 w-4" />,
-      detail: 'FastAPI returns HTTP 200 with JSON body. Total handler time: 20.5ms. Response includes X-Process-Time header.',
-      timing: '0ms',
-    },
-    logMessage: '200 OK — total: 20.5ms',
-    logType: 'success',
-  },
-];
+};
 
-const WS_NODES: SimNodeData[] = [
-  { id: 'client-a', label: 'Client A', icon: <Monitor className="h-4 w-4" />, detail: 'Client A connects via WebSocket and sends a chat message.' },
-  { id: 'server', label: 'WS Server', icon: <Server className="h-4 w-4" />, detail: 'WebSocket server receives the message and broadcasts it to all connected clients.' },
-  { id: 'client-b', label: 'Client B', icon: <Monitor className="h-4 w-4" />, detail: 'Client B receives the broadcasted message from the server.' },
-  { id: 'client-c', label: 'Client C', icon: <Monitor className="h-4 w-4" />, detail: 'Client C receives the broadcasted message from the server.' },
-  { id: 'client-d', label: 'Client D', icon: <Monitor className="h-4 w-4" />, detail: 'Client D receives the broadcasted message from the server.' },
-];
+// ─── SVG Icon Components ─────────────────────────────────────────────
 
-const WS_LOG_STEPS: SimStep[] = [
-  { node: WS_NODES[0], logMessage: 'Client A sends: "Hello everyone!"', logType: 'info' },
-  { node: WS_NODES[1], logMessage: 'Server received message from Client A', logType: 'info' },
-  { node: WS_NODES[2], logMessage: 'Client B received: "Hello everyone!"', logType: 'success' },
-  { node: WS_NODES[3], logMessage: 'Client C received: "Hello everyone!"', logType: 'success' },
-  { node: WS_NODES[4], logMessage: 'Client D received: "Hello everyone!"', logType: 'success' },
-];
-
-const MW_STEPS: SimStep[] = [
-  {
-    node: {
-      id: 'cors',
-      label: 'CORS Middleware',
-      icon: <Shield className="h-4 w-4" />,
-      detail: 'Checks Origin header against allowed origins. Adds Access-Control-Allow-Origin and related headers. Preflight requests are handled here.',
-      canReject: true,
-      rejectReason: 'Origin not allowed',
-    },
-    logMessage: 'CORS check passed — origin: https://app.example.com',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'rate-limit',
-      label: 'Rate Limiter',
-      icon: <Zap className="h-4 w-4" />,
-      detail: 'Checks request count per IP in the sliding window (100 req/min). Uses Redis counter for distributed rate limiting.',
-      canReject: true,
-      rejectReason: 'Rate limit exceeded (429)',
-    },
-    logMessage: 'Rate limit OK — 23/100 requests this minute',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'auth',
-      label: 'Auth Middleware',
-      icon: <Lock className="h-4 w-4" />,
-      detail: 'Validates JWT from Authorization header. Verifies signature and expiration. Extracts user claims for downstream use.',
-      canReject: true,
-      rejectReason: 'Invalid or expired token (401)',
-    },
-    logMessage: 'JWT validated — user_id: 42',
-    logType: 'success',
-  },
-  {
-    node: {
-      id: 'logging',
-      label: 'Logging',
-      icon: <Layers className="h-4 w-4" />,
-      detail: 'Records request method, path, status code, and processing time. Structured JSON logs for observability pipeline.',
-      canReject: false,
-    },
-    logMessage: 'Logged: GET /users — processing...',
-    logType: 'info',
-  },
-  {
-    node: {
-      id: 'handler',
-      label: 'Route Handler',
-      icon: <Server className="h-4 w-4" />,
-      detail: 'Final handler executes business logic. All middleware checks have passed. Returns the response to the client.',
-    },
-    logMessage: 'Handler executed — 200 OK',
-    logType: 'success',
-  },
-];
-
-// ─── CSS Keyframes ───────────────────────────────────────────────────
-
-const CSS_KEYFRAMES = `
-@keyframes sim-moveDot {
-  0% { left: 0%; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { left: 100%; opacity: 0; }
-}
-
-@keyframes sim-pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0); }
-  50% { box-shadow: 0 0 16px 4px rgba(20, 184, 166, 0.4); }
-}
-
-@keyframes sim-pulseGlowError {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-  50% { box-shadow: 0 0 16px 4px rgba(239, 68, 68, 0.4); }
-}
-
-@keyframes sim-slideIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes sim-flyRight {
-  0% { transform: translateX(0); opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translateX(var(--fly-distance, 120px)); opacity: 0; }
-}
-
-@keyframes sim-flyDown {
-  0% { transform: translateY(0); opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translateY(var(--fly-distance, 60px)); opacity: 0; }
-}
-
-@keyframes sim-flyDiagonalBR {
-  0% { transform: translate(0, 0); opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translate(var(--fly-x, 80px), var(--fly-y, 60px)); opacity: 0; }
-}
-
-@keyframes sim-flyDiagonalBL {
-  0% { transform: translate(0, 0); opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { transform: translate(var(--fly-x, -80px), var(--fly-y, 60px)); opacity: 0; }
-}
-
-@keyframes sim-rejectFlash {
-  0% { background-color: rgba(239, 68, 68, 0); }
-  50% { background-color: rgba(239, 68, 68, 0.2); }
-  100% { background-color: rgba(239, 68, 68, 0); }
-}
-
-@keyframes sim-appear {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@keyframes sim-bounceIn {
-  0% { transform: scale(0); }
-  50% { transform: scale(1.15); }
-  100% { transform: scale(1); }
-}
-`;
-
-// ─── Shared Components ───────────────────────────────────────────────
-
-function ControlBar({
-  isPlaying,
-  onPlay,
-  onPause,
-  onReset,
-  completed,
-}: {
-  isPlaying: boolean;
-  onPlay: () => void;
-  onPause: () => void;
-  onReset: () => void;
-  completed: boolean;
-}) {
+function SvgIconMonitor({ className }: { className?: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={isPlaying ? onPause : onPlay}
-        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all
-          bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20
-          focus:outline-none focus:ring-2 focus:ring-teal-500/40"
-        aria-label={isPlaying ? 'Pause simulation' : 'Play simulation'}
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="14" x="2" y="3" rx="2" />
+      <line x1="8" x2="16" y1="21" y2="21" />
+      <line x1="12" x2="12" y1="17" y2="21" />
+    </svg>
+  );
+}
+
+function SvgIconGlobe({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
+    </svg>
+  );
+}
+
+function SvgIconServer({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+      <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+      <line x1="6" x2="6.01" y1="6" y2="6" />
+      <line x1="6" x2="6.01" y1="18" y2="18" />
+    </svg>
+  );
+}
+
+function SvgIconShield({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+function SvgIconLock({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function SvgIconZap({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+    </svg>
+  );
+}
+
+function SvgIconDatabase({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M3 5V19A9 3 0 0 0 21 19V5" />
+      <path d="M3 12A9 3 0 0 0 21 12" />
+    </svg>
+  );
+}
+
+function SvgIconUsers({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function SvgIconKey({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="m21 2-9.6 9.6" />
+      <path d="m15.5 7.5 3 3L22 7l-3-3" />
+    </svg>
+  );
+}
+
+function SvgIconWifi({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h.01" />
+      <path d="M8.5 16.5a5 5 0 0 1 7 0" />
+      <path d="M5 13a10 10 0 0 1 14 0" />
+      <path d="M1.5 9.5a15 15 0 0 1 21 0" />
+    </svg>
+  );
+}
+
+function SvgIconLayers({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
+      <path d="m22.54 12.43-1.97-.9-8.57 3.91a2 2 0 0 1-1.66 0l-8.58-3.9-1.97.9a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.91a1 1 0 0 0 0-1.83Z" />
+    </svg>
+  );
+}
+
+function SvgIconRoute({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="19" r="3" />
+      <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
+      <circle cx="18" cy="5" r="3" />
+    </svg>
+  );
+}
+
+function SvgIconCheck({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+function SvgIconX({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+// ─── Step Icon Mapping ───────────────────────────────────────────────
+
+function getStepIcon(stepId: string, className: string): React.ReactNode {
+  const iconMap: Record<string, React.ReactNode> = {
+    client: <SvgIconMonitor className={className} />,
+    dns: <SvgIconGlobe className={className} />,
+    server: <SvgIconServer className={className} />,
+    middleware: <SvgIconLayers className={className} />,
+    route: <SvgIconRoute className={className} />,
+    validation: <SvgIconShield className={className} />,
+    handler: <SvgIconZap className={className} />,
+    response: <SvgIconCheck className={className} />,
+    login: <SvgIconUsers className={className} />,
+    'create-jwt': <SvgIconLock className={className} />,
+    'store-token': <SvgIconShield className={className} />,
+    'bearer-request': <SvgIconKey className={className} />,
+    'verify-jwt': <SvgIconShield className={className} />,
+    'access-granted': <SvgIconCheck className={className} />,
+    'access-denied': <SvgIconX className={className} />,
+    'api-request': <SvgIconMonitor className={className} />,
+    session: <SvgIconDatabase className={className} />,
+    'query-build': <SvgIconLayers className={className} />,
+    'db-execute': <SvgIconDatabase className={className} />,
+    'result-map': <SvgIconLayers className={className} />,
+    connect: <SvgIconWifi className={className} />,
+    handshake: <SvgIconShield className={className} />,
+    'message-exchange': <SvgIconZap className={className} />,
+    broadcasting: <SvgIconWifi className={className} />,
+    disconnect: <SvgIconX className={className} />,
+    request: <SvgIconMonitor className={className} />,
+    cors: <SvgIconShield className={className} />,
+    auth: <SvgIconLock className={className} />,
+    'rate-limit': <SvgIconZap className={className} />,
+    logging: <SvgIconLayers className={className} />,
+  };
+  return iconMap[stepId] ?? <SvgIconServer className={className} />;
+}
+
+// ─── Inline SVG Flow Renderer ────────────────────────────────────────
+
+function FlowVisualization({
+  steps,
+  currentStep,
+  completedSteps,
+  simulationType,
+}: {
+  steps: SimStep[];
+  currentStep: number;
+  completedSteps: Set<number>;
+  simulationType: SimulationType;
+}) {
+  const isLastStepDenied = simulationType === 'JWT_LIFECYCLE' && currentStep === steps.length - 1;
+  const isHubSpoke = simulationType === 'WEBSOCKET_FLOW';
+
+  // Hub-and-spoke layout for WebSocket
+  if (isHubSpoke) {
+    const nodeW = 100;
+    const nodeH = 48;
+    const svgW = 420;
+    const svgH = 320;
+
+    // Position: Client at top center, Server in middle, Broadcast clients at bottom
+    const clientPos = { x: svgW / 2 - nodeW / 2, y: 16 };
+    const serverPos = { x: svgW / 2 - nodeW / 2, y: 136 };
+    const clientBPos = { x: 16, y: 256 };
+    const clientCPos = { x: svgW / 2 - nodeW / 2, y: 256 };
+    const clientDPos = { x: svgW - nodeW - 16, y: 256 };
+
+    const nodePositions = [clientPos, serverPos, clientBPos, clientCPos, clientDPos];
+
+    // Connection lines
+    const connections = [
+      { from: 0, to: 1 },
+      { from: 1, to: 2 },
+      { from: 1, to: 3 },
+      { from: 1, to: 4 },
+    ];
+
+    // Animated dots on connections
+    const activeConnectionIdx = currentStep > 0 ? currentStep - 1 : -1;
+
+    return (
+      <svg
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        className="w-full max-w-md mx-auto"
+        role="img"
+        aria-label="WebSocket flow visualization"
       >
-        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        {isPlaying ? 'Pause' : completed ? 'Replay' : 'Play'}
-      </button>
-      <button
-        onClick={onReset}
-        className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all
-          bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:bg-slate-700
-          focus:outline-none focus:ring-2 focus:ring-slate-500/40"
-        aria-label="Reset simulation"
+        <defs>
+          <filter id="sim-glow-filter">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#475569" />
+          </marker>
+          <marker id="arrowhead-teal" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2dd4bf" />
+          </marker>
+        </defs>
+
+        {/* Connection lines */}
+        {connections.map((conn, i) => {
+          const fromCenter = {
+            x: nodePositions[conn.from].x + nodeW / 2,
+            y: nodePositions[conn.from].y + nodeH,
+          };
+          const toCenter = {
+            x: nodePositions[conn.to].x + nodeW / 2,
+            y: nodePositions[conn.to].y,
+          };
+          const isActive = activeConnectionIdx === i;
+          return (
+            <line
+              key={`conn-${i}`}
+              x1={fromCenter.x}
+              y1={fromCenter.y}
+              x2={toCenter.x}
+              y2={toCenter.y}
+              stroke={isActive ? '#2dd4bf' : '#334155'}
+              strokeWidth={isActive ? 2 : 1.5}
+              markerEnd={isActive ? 'url(#arrowhead-teal)' : 'url(#arrowhead)'}
+              className="transition-all duration-300"
+            />
+          );
+        })}
+
+        {/* Animated packet dot */}
+        {currentStep > 0 && currentStep <= 4 && (() => {
+          const connIdx = Math.min(currentStep - 1, connections.length - 1);
+          const conn = connections[connIdx];
+          const fromCenter = {
+            x: nodePositions[conn.from].x + nodeW / 2,
+            y: nodePositions[conn.from].y + nodeH,
+          };
+          const toCenter = {
+            x: nodePositions[conn.to].x + nodeW / 2,
+            y: nodePositions[conn.to].y,
+          };
+          return (
+            <circle r="4" fill="#2dd4bf" filter="url(#sim-glow-filter)">
+              <animate
+                attributeName="cx"
+                from={fromCenter.x}
+                to={toCenter.x}
+                dur="0.8s"
+                begin="0s"
+                fill="freeze"
+              />
+              <animate
+                attributeName="cy"
+                from={fromCenter.y}
+                to={toCenter.y}
+                dur="0.8s"
+                begin="0s"
+                fill="freeze"
+              />
+              <animate
+                attributeName="opacity"
+                values="0;1;1;0"
+                keyTimes="0;0.1;0.8;1"
+                dur="0.8s"
+                begin="0s"
+                fill="freeze"
+              />
+            </circle>
+          );
+        })()}
+
+        {/* Nodes */}
+        {steps.map((step, i) => {
+          const pos = nodePositions[i];
+          const isActive = currentStep === i;
+          const isCompleted = completedSteps.has(i);
+          const fillColor = isActive
+            ? 'rgba(20, 184, 166, 0.15)'
+            : isCompleted
+              ? 'rgba(16, 185, 129, 0.1)'
+              : 'rgba(30, 41, 59, 0.8)';
+          const strokeColor = isActive
+            ? '#14b8a6'
+            : isCompleted
+              ? '#10b981'
+              : '#334155';
+          const textColor = isActive
+            ? '#5eead4'
+            : isCompleted
+              ? '#6ee7b7'
+              : '#94a3b8';
+
+          return (
+            <g key={step.id}>
+              {/* Glow effect for active node */}
+              {isActive && (
+                <rect
+                  x={pos.x - 2}
+                  y={pos.y - 2}
+                  width={nodeW + 4}
+                  height={nodeH + 4}
+                  rx="10"
+                  fill="none"
+                  stroke="#14b8a6"
+                  strokeWidth="1"
+                  opacity="0.5"
+                  className="sim-pulse"
+                />
+              )}
+              <rect
+                x={pos.x}
+                y={pos.y}
+                width={nodeW}
+                height={nodeH}
+                rx="8"
+                fill={fillColor}
+                stroke={strokeColor}
+                strokeWidth={isActive ? 2 : 1.5}
+                className="transition-all duration-300"
+              />
+              <text
+                x={pos.x + nodeW / 2}
+                y={pos.y + nodeH / 2 + 4}
+                textAnchor="middle"
+                fill={textColor}
+                fontSize="11"
+                fontWeight="600"
+                fontFamily="system-ui, sans-serif"
+                className="transition-all duration-300"
+              >
+                {step.label}
+              </text>
+              {/* Step number badge */}
+              <circle
+                cx={pos.x + nodeW - 4}
+                cy={pos.y + 4}
+                r="8"
+                fill={isActive ? '#14b8a6' : isCompleted ? '#10b981' : '#475569'}
+              />
+              <text
+                x={pos.x + nodeW - 4}
+                y={pos.y + 7.5}
+                textAnchor="middle"
+                fill="white"
+                fontSize="8"
+                fontWeight="700"
+                fontFamily="system-ui, sans-serif"
+              >
+                {i + 1}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }
+
+  // Standard horizontal/vertical layout
+  const isVertical = simulationType === 'JWT_LIFECYCLE';
+  const nodeW = 88;
+  const nodeH = 52;
+  const gapX = 24;
+  const gapY = 20;
+
+  if (isVertical) {
+    const svgW = 320;
+    const svgH = steps.length * (nodeH + gapY) - gapY + 32;
+    const cx = svgW / 2 - nodeW / 2;
+
+    return (
+      <svg
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        className="w-full max-w-sm mx-auto"
+        role="img"
+        aria-label={`${simulationType} visualization`}
       >
-        <RotateCcw className="h-4 w-4" />
-        Reset
-      </button>
+        <defs>
+          <filter id="sim-glow-v">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <marker id="arrowhead-v" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#475569" />
+          </marker>
+          <marker id="arrowhead-teal-v" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#2dd4bf" />
+          </marker>
+        </defs>
+
+        {steps.map((step, i) => {
+          const y = 16 + i * (nodeH + gapY);
+          const isActive = currentStep === i;
+          const isCompleted = completedSteps.has(i);
+          const isDenied = step.id === 'access-denied' && isActive;
+
+          const fillColor = isDenied
+            ? 'rgba(239, 68, 68, 0.15)'
+            : isActive
+              ? 'rgba(20, 184, 166, 0.15)'
+              : isCompleted
+                ? 'rgba(16, 185, 129, 0.1)'
+                : 'rgba(30, 41, 59, 0.8)';
+          const strokeColor = isDenied
+            ? '#ef4444'
+            : isActive
+              ? '#14b8a6'
+              : isCompleted
+                ? '#10b981'
+                : '#334155';
+          const textColor = isDenied
+            ? '#f87171'
+            : isActive
+              ? '#5eead4'
+              : isCompleted
+                ? '#6ee7b7'
+                : '#94a3b8';
+
+          return (
+            <g key={step.id}>
+              {/* Arrow between nodes */}
+              {i > 0 && (
+                <>
+                  <line
+                    x1={cx + nodeW / 2}
+                    y1={16 + (i - 1) * (nodeH + gapY) + nodeH}
+                    x2={cx + nodeW / 2}
+                    y2={y - 2}
+                    stroke={isActive ? '#14b8a6' : '#334155'}
+                    strokeWidth={1.5}
+                    markerEnd={isActive ? 'url(#arrowhead-teal-v)' : 'url(#arrowhead-v)'}
+                    className="transition-all duration-300"
+                  />
+                  {/* Animated dot traveling down */}
+                  {isActive && (
+                    <circle r="3" fill="#2dd4bf" filter="url(#sim-glow-v)">
+                      <animate
+                        attributeName="cx"
+                        from={cx + nodeW / 2}
+                        to={cx + nodeW / 2}
+                        dur="0.6s"
+                        fill="freeze"
+                      />
+                      <animate
+                        attributeName="cy"
+                        from={16 + (i - 1) * (nodeH + gapY) + nodeH}
+                        to={y - 2}
+                        dur="0.6s"
+                        fill="freeze"
+                      />
+                      <animate
+                        attributeName="opacity"
+                        values="0;1;1;0"
+                        keyTimes="0;0.1;0.8;1"
+                        dur="0.6s"
+                        fill="freeze"
+                      />
+                    </circle>
+                  )}
+                </>
+              )}
+
+              {/* Glow for active */}
+              {isActive && (
+                <rect
+                  x={cx - 2}
+                  y={y - 2}
+                  width={nodeW + 4}
+                  height={nodeH + 4}
+                  rx="10"
+                  fill="none"
+                  stroke={isDenied ? '#ef4444' : '#14b8a6'}
+                  strokeWidth="1"
+                  opacity="0.5"
+                  className="sim-pulse"
+                />
+              )}
+
+              <rect
+                x={cx}
+                y={y}
+                width={nodeW}
+                height={nodeH}
+                rx="8"
+                fill={fillColor}
+                stroke={strokeColor}
+                strokeWidth={isActive ? 2 : 1.5}
+                className="transition-all duration-300"
+              />
+              <text
+                x={cx + nodeW / 2}
+                y={y + nodeH / 2 + 4}
+                textAnchor="middle"
+                fill={textColor}
+                fontSize="11"
+                fontWeight="600"
+                fontFamily="system-ui, sans-serif"
+                className="transition-all duration-300"
+              >
+                {step.label}
+              </text>
+              {/* Step number */}
+              <circle
+                cx={cx + nodeW - 2}
+                cy={y + 4}
+                r="8"
+                fill={isDenied ? '#ef4444' : isActive ? '#14b8a6' : isCompleted ? '#10b981' : '#475569'}
+              />
+              <text
+                x={cx + nodeW - 2}
+                y={y + 7.5}
+                textAnchor="middle"
+                fill="white"
+                fontSize="8"
+                fontWeight="700"
+                fontFamily="system-ui, sans-serif"
+              >
+                {i + 1}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }
+
+  // Horizontal layout
+  const totalW = steps.length * nodeW + (steps.length - 1) * gapX + 32;
+  const svgH_h = nodeH + 40;
+
+  return (
+    <svg
+      viewBox={`0 0 ${totalW} ${svgH_h}`}
+      className="w-full overflow-visible"
+      role="img"
+      aria-label={`${simulationType} visualization`}
+      style={{ minWidth: `${Math.min(steps.length * 70, 800)}px` }}
+    >
+      <defs>
+        <filter id="sim-glow-h">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <marker id="arrowhead-h" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#475569" />
+        </marker>
+        <marker id="arrowhead-teal-h" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#2dd4bf" />
+        </marker>
+      </defs>
+
+      {steps.map((step, i) => {
+        const x = 16 + i * (nodeW + gapX);
+        const y = 16;
+        const isActive = currentStep === i;
+        const isCompleted = completedSteps.has(i);
+
+        const fillColor = isActive
+          ? 'rgba(20, 184, 166, 0.15)'
+          : isCompleted
+            ? 'rgba(16, 185, 129, 0.1)'
+            : 'rgba(30, 41, 59, 0.8)';
+        const strokeColor = isActive
+          ? '#14b8a6'
+          : isCompleted
+            ? '#10b981'
+            : '#334155';
+        const textColor = isActive
+          ? '#5eead4'
+          : isCompleted
+            ? '#6ee7b7'
+            : '#94a3b8';
+
+        return (
+          <g key={step.id}>
+            {/* Arrow between nodes */}
+            {i > 0 && (
+              <>
+                <line
+                  x1={16 + (i - 1) * (nodeW + gapX) + nodeW}
+                  y1={y + nodeH / 2}
+                  x2={x - 2}
+                  y2={y + nodeH / 2}
+                  stroke={isActive ? '#14b8a6' : '#334155'}
+                  strokeWidth={1.5}
+                  markerEnd={isActive ? 'url(#arrowhead-teal-h)' : 'url(#arrowhead-h)'}
+                  className="transition-all duration-300"
+                />
+                {/* Animated packet dot */}
+                {isActive && (
+                  <circle r="3" fill="#2dd4bf" filter="url(#sim-glow-h)">
+                    <animate
+                      attributeName="cx"
+                      from={16 + (i - 1) * (nodeW + gapX) + nodeW}
+                      to={x - 2}
+                      dur="0.6s"
+                      fill="freeze"
+                    />
+                    <animate
+                      attributeName="cy"
+                      from={y + nodeH / 2}
+                      to={y + nodeH / 2}
+                      dur="0.6s"
+                      fill="freeze"
+                    />
+                    <animate
+                      attributeName="opacity"
+                      values="0;1;1;0"
+                      keyTimes="0;0.1;0.8;1"
+                      dur="0.6s"
+                      fill="freeze"
+                    />
+                  </circle>
+                )}
+              </>
+            )}
+
+            {/* Glow for active */}
+            {isActive && (
+              <rect
+                x={x - 2}
+                y={y - 2}
+                width={nodeW + 4}
+                height={nodeH + 4}
+                rx="10"
+                fill="none"
+                stroke="#14b8a6"
+                strokeWidth="1"
+                opacity="0.5"
+                className="sim-pulse"
+              />
+            )}
+
+            <rect
+              x={x}
+              y={y}
+              width={nodeW}
+              height={nodeH}
+              rx="8"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={isActive ? 2 : 1.5}
+              className="transition-all duration-300"
+            />
+            <text
+              x={x + nodeW / 2}
+              y={y + nodeH / 2 + 4}
+              textAnchor="middle"
+              fill={textColor}
+              fontSize="11"
+              fontWeight="600"
+              fontFamily="system-ui, sans-serif"
+              className="transition-all duration-300"
+            >
+              {step.label}
+            </text>
+            {/* Step number */}
+            <circle
+              cx={x + nodeW - 2}
+              cy={y + 4}
+              r="8"
+              fill={isActive ? '#14b8a6' : isCompleted ? '#10b981' : '#475569'}
+            />
+            <text
+              x={x + nodeW - 2}
+              y={y + 7.5}
+              textAnchor="middle"
+              fill="white"
+              fontSize="8"
+              fontWeight="700"
+              fontFamily="system-ui, sans-serif"
+            >
+              {i + 1}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ─── Step Indicator Bar ──────────────────────────────────────────────
+
+function StepIndicatorBar({
+  steps,
+  currentStep,
+  completedSteps,
+}: {
+  steps: SimStep[];
+  currentStep: number;
+  completedSteps: Set<number>;
+}) {
+  const progress = steps.length > 0
+    ? currentStep >= 0
+      ? ((completedSteps.size + (currentStep >= 0 ? 1 : 0)) / steps.length) * 100
+      : completedSteps.size > 0
+        ? (completedSteps.size / steps.length) * 100
+        : 0
+    : 0;
+
+  return (
+    <div className="space-y-2">
+      {/* Progress bar */}
+      <div className="h-1.5 w-full rounded-full bg-slate-700/50 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-500 ease-out"
+          style={{ width: `${Math.min(progress, 100)}%` }}
+        />
+      </div>
+      {/* Step dots */}
+      <div className="flex items-center justify-between px-1">
+        {steps.map((step, i) => {
+          const isActive = currentStep === i;
+          const isCompleted = completedSteps.has(i);
+          return (
+            <button
+              key={step.id}
+              className={`
+                flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold transition-all duration-300
+                focus:outline-none focus:ring-2 focus:ring-teal-500/40
+                ${isActive
+                  ? 'bg-teal-500 text-white sim-pulse shadow-lg shadow-teal-500/30'
+                  : isCompleted
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-700 text-slate-400'
+                }
+              `}
+              aria-label={`Step ${i + 1}: ${step.label}`}
+              title={step.label}
+            >
+              {isCompleted && !isActive ? '✓' : i + 1}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function LogPanel({ logs }: { logs: LogEntry[] }) {
+// ─── Step Description Panel ──────────────────────────────────────────
+
+function StepDescription({
+  steps,
+  currentStep,
+  completedSteps,
+}: {
+  steps: SimStep[];
+  currentStep: number;
+  completedSteps: Set<number>;
+}) {
+  const activeStep = currentStep >= 0 ? steps[currentStep] : null;
+  const isDenied = activeStep?.id === 'access-denied';
+
+  return (
+    <div className="min-h-[80px]">
+      {activeStep ? (
+        <div
+          key={activeStep.id}
+          className={`
+            p-4 rounded-xl border transition-all sim-fade-in
+            ${isDenied
+              ? 'bg-red-500/5 border-red-500/20'
+              : 'bg-teal-500/5 border-teal-500/20'
+            }
+          `}
+        >
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className={isDenied ? 'text-red-400' : 'text-teal-400'}>
+              {getStepIcon(activeStep.id, 'h-4 w-4')}
+            </span>
+            <span className={`text-sm font-bold ${isDenied ? 'text-red-300' : 'text-teal-300'}`}>
+              Step {currentStep + 1}: {activeStep.label}
+            </span>
+            <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
+              isDenied
+                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                : 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
+            }`}>
+              {activeStep.description}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 leading-relaxed">{activeStep.detail}</p>
+        </div>
+      ) : completedSteps.size > 0 ? (
+        <div className="p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 sim-fade-in">
+          <div className="flex items-center gap-2">
+            <SvgIconCheck className="h-5 w-5 text-emerald-400" />
+            <span className="text-sm font-bold text-emerald-300">Simulation Complete</span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            All {steps.length} steps have been completed. Press Play to run again or Reset to start over.
+          </p>
+        </div>
+      ) : (
+        <div className="p-4 rounded-xl border bg-slate-800/50 border-slate-700/50">
+          <div className="flex items-center gap-2">
+            <SvgIconZap className="h-5 w-5 text-slate-500" />
+            <span className="text-sm font-medium text-slate-400">Press Play to start the simulation</span>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            This simulation has {steps.length} steps. Each step will highlight as the animation progresses.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Event Log ───────────────────────────────────────────────────────
+
+interface LogEntry {
+  id: number;
+  step: number;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+}
+
+function EventLog({ logs }: { logs: LogEntry[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -466,791 +1174,242 @@ function LogPanel({ logs }: { logs: LogEntry[] }) {
     }
   }, [logs]);
 
-  const typeColors: Record<LogEntry['type'], string> = {
-    info: 'text-sky-400',
-    success: 'text-emerald-400',
-    warning: 'text-amber-400',
-    error: 'text-red-400',
-  };
-
-  const typeBadge: Record<LogEntry['type'], string> = {
-    info: 'bg-sky-500/10 border-sky-500/20',
-    success: 'bg-emerald-500/10 border-emerald-500/20',
-    warning: 'bg-amber-500/10 border-amber-500/20',
-    error: 'bg-red-500/10 border-red-500/20',
+  const typeConfig: Record<LogEntry['type'], { color: string; badge: string }> = {
+    info: { color: 'text-sky-400', badge: 'bg-sky-500/10 border-sky-500/20' },
+    success: { color: 'text-emerald-400', badge: 'bg-emerald-500/10 border-emerald-500/20' },
+    warning: { color: 'text-amber-400', badge: 'bg-amber-500/10 border-amber-500/20' },
+    error: { color: 'text-red-400', badge: 'bg-red-500/10 border-red-500/20' },
   };
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-900/80 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-slate-700/50 bg-slate-800/50">
+      <div className="px-4 py-2.5 border-b border-slate-700/50 bg-slate-800/50 flex items-center justify-between">
         <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Event Log</h4>
+        <span className="text-[10px] text-slate-500 font-mono">{logs.length} events</span>
       </div>
-      <div ref={scrollRef} className="max-h-48 overflow-y-auto p-3 space-y-1.5 scrollbar-thin">
+      <div
+        ref={scrollRef}
+        className="max-h-40 overflow-y-auto p-3 space-y-1"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#334155 transparent',
+        }}
+      >
         {logs.length === 0 && (
-          <p className="text-xs text-slate-500 italic text-center py-4">Press Play to start the simulation...</p>
+          <p className="text-xs text-slate-500 italic text-center py-3">
+            Events will appear here as the simulation runs...
+          </p>
         )}
-        {logs.map((log) => (
-          <div
-            key={log.id}
-            className="flex items-start gap-2 text-xs"
-            style={{ animation: 'sim-slideIn 0.3s ease-out' }}
-          >
-            <span className={`shrink-0 px-1.5 py-0.5 rounded border font-mono ${typeBadge[log.type]} ${typeColors[log.type]}`}>
-              {log.type.toUpperCase()}
-            </span>
-            <span className="text-slate-300 font-mono">{log.message}</span>
-            <span className="text-slate-600 ml-auto shrink-0">{log.timestamp}ms</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Animated Arrow with Dot ─────────────────────────────────────────
-
-function AnimatedArrow({ active, index }: { active: boolean; index: number }) {
-  return (
-    <div className="flex items-center justify-center w-8 sm:w-12 shrink-0 relative">
-      <div className="h-0.5 w-full bg-slate-700 rounded-full" />
-      <ChevronRight className="h-3 w-3 text-slate-600 absolute right-0" />
-      {active && (
-        <div
-          className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-teal-400 shadow-lg shadow-teal-400/50"
-          style={{
-            animation: `sim-moveDot 0.8s ease-in-out ${index * 0.1}s forwards`,
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ─── Simulation Node Box ─────────────────────────────────────────────
-
-function SimNodeBox({
-  node,
-  active,
-  completed,
-  rejected,
-  onClick,
-  showTiming,
-  compact,
-}: {
-  node: SimNodeData;
-  active: boolean;
-  completed: boolean;
-  rejected?: boolean;
-  onClick?: () => void;
-  showTiming?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        relative flex flex-col items-center gap-1 px-3 ${compact ? 'py-2' : 'py-3'} rounded-xl border transition-all
-        min-w-[80px] max-w-[140px] text-center cursor-pointer select-none
-        focus:outline-none focus:ring-2 focus:ring-teal-500/40
-        ${rejected
-          ? 'bg-red-500/10 border-red-500/30 text-red-400'
-          : active
-            ? 'bg-teal-500/15 border-teal-500/40 text-teal-300'
-            : completed
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-              : 'bg-slate-800/80 border-slate-700/50 text-slate-400 hover:border-slate-600'
-        }
-      `}
-      style={{
-        animation: active ? 'sim-pulseGlow 1.5s ease-in-out infinite' : rejected ? 'sim-pulseGlowError 1s ease-in-out infinite' : undefined,
-      }}
-      aria-label={`${node.label}${active ? ' (active)' : ''}${completed ? ' (completed)' : ''}`}
-    >
-      <div className={`${compact ? 'h-4 w-4' : 'h-5 w-5'}`}>{node.icon}</div>
-      <span className={`font-semibold leading-tight ${compact ? 'text-[10px]' : 'text-xs'}`}>{node.label}</span>
-      {showTiming && node.timing && (
-        <span className="text-[10px] text-slate-500 font-mono">{node.timing}</span>
-      )}
-      {rejected && <X className="h-3 w-3 text-red-400 absolute -top-1 -right-1" />}
-    </button>
-  );
-}
-
-// ─── Detail Tooltip ──────────────────────────────────────────────────
-
-function DetailPanel({ node, visible }: { node: SimNodeData | null; visible: boolean }) {
-  if (!visible || !node) return null;
-  return (
-    <div
-      className="mt-3 p-3 rounded-lg border border-teal-500/20 bg-teal-500/5 text-xs text-slate-300 leading-relaxed"
-      style={{ animation: 'sim-slideIn 0.2s ease-out' }}
-    >
-      <div className="font-semibold text-teal-400 mb-1 flex items-center gap-1.5">
-        {node.icon}
-        {node.label}
-      </div>
-      {node.detail}
-    </div>
-  );
-}
-
-// ─── HTTP Request Flow ───────────────────────────────────────────────
-
-function HttpRequestFlow({
-  currentStep,
-  completedSteps,
-  logs,
-  selectedNode,
-  onSelectNode,
-}: {
-  currentStep: number;
-  completedSteps: Set<number>;
-  logs: LogEntry[];
-  selectedNode: number | null;
-  onSelectNode: (i: number) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-0">
-        {HTTP_NODES.map((step, i) => (
-          <div key={step.node.id} className="flex items-center">
-            <SimNodeBox
-              node={step.node}
-              active={currentStep === i}
-              completed={completedSteps.has(i)}
-              onClick={() => onSelectNode(i)}
-              showTiming
-            />
-            {i < HTTP_NODES.length - 1 && (
-              <AnimatedArrow active={currentStep === i} index={i} />
-            )}
-          </div>
-        ))}
-      </div>
-      <DetailPanel
-        node={selectedNode !== null ? HTTP_NODES[selectedNode].node : null}
-        visible={selectedNode !== null}
-      />
-      <LogPanel logs={logs} />
-    </div>
-  );
-}
-
-// ─── JWT Lifecycle ───────────────────────────────────────────────────
-
-function JwtLifecycle({
-  currentStep,
-  completedSteps,
-  logs,
-}: {
-  currentStep: number;
-  completedSteps: Set<number>;
-  logs: LogEntry[];
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col items-center gap-1 max-w-md mx-auto">
-        {JWT_STEPS.map((step, i) => (
-          <div key={step.node.id} className="flex flex-col items-center gap-1 w-full">
+        {logs.map((log) => {
+          const cfg = typeConfig[log.type];
+          return (
             <div
-              className={`w-full px-4 py-3 rounded-xl border transition-all text-center
-                ${currentStep === i
-                  ? 'bg-teal-500/15 border-teal-500/40 text-teal-300'
-                  : completedSteps.has(i)
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                    : 'bg-slate-800/80 border-slate-700/50 text-slate-500'
-                }
-              `}
-              style={{
-                animation: currentStep === i ? 'sim-pulseGlow 1.5s ease-in-out infinite' : undefined,
-              }}
+              key={log.id}
+              className="flex items-start gap-2 text-xs sim-fade-in"
             >
-              <div className="flex items-center justify-center gap-2">
-                <span className={currentStep === i ? 'text-teal-400' : completedSteps.has(i) ? 'text-emerald-400' : 'text-slate-600'}>
-                  {step.node.icon}
-                </span>
-                <span className="text-sm font-semibold">{step.node.label}</span>
-              </div>
-              <p className="text-[11px] mt-1 text-slate-400 leading-snug max-w-sm mx-auto">{step.node.detail}</p>
-            </div>
-            {i < JWT_STEPS.length - 1 && (
-              <div className="flex flex-col items-center py-0.5">
-                <div className="w-0.5 h-4 bg-slate-700" />
-                <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-600" />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      <LogPanel logs={logs} />
-    </div>
-  );
-}
-
-// ─── Database Query ──────────────────────────────────────────────────
-
-function DatabaseQuery({
-  currentStep,
-  completedSteps,
-  logs,
-  selectedNode,
-  onSelectNode,
-}: {
-  currentStep: number;
-  completedSteps: Set<number>;
-  logs: LogEntry[];
-  selectedNode: number | null;
-  onSelectNode: (i: number) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      {/* Desktop: horizontal flow */}
-      <div className="hidden lg:flex flex-wrap items-center justify-center gap-1">
-        {DB_STEPS.map((step, i) => (
-          <div key={step.node.id} className="flex items-center">
-            <SimNodeBox
-              node={step.node}
-              active={currentStep === i}
-              completed={completedSteps.has(i)}
-              onClick={() => onSelectNode(i)}
-              showTiming
-              compact
-            />
-            {i < DB_STEPS.length - 1 && (
-              <AnimatedArrow active={currentStep === i} index={i} />
-            )}
-          </div>
-        ))}
-      </div>
-      {/* Mobile: vertical flow */}
-      <div className="lg:hidden flex flex-col items-center gap-1 max-w-sm mx-auto">
-        {DB_STEPS.map((step, i) => (
-          <div key={step.node.id} className="flex flex-col items-center gap-1 w-full">
-            <button
-              onClick={() => onSelectNode(i)}
-              className={`w-full px-4 py-2.5 rounded-xl border transition-all text-center
-                ${currentStep === i
-                  ? 'bg-teal-500/15 border-teal-500/40 text-teal-300'
-                  : completedSteps.has(i)
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                    : 'bg-slate-800/80 border-slate-700/50 text-slate-500'
-                }
-              `}
-              style={{
-                animation: currentStep === i ? 'sim-pulseGlow 1.5s ease-in-out infinite' : undefined,
-              }}
-            >
-              <div className="flex items-center justify-center gap-2">
-                <span className={currentStep === i ? 'text-teal-400' : completedSteps.has(i) ? 'text-emerald-400' : 'text-slate-600'}>
-                  {step.node.icon}
-                </span>
-                <span className="text-xs font-semibold">{step.node.label}</span>
-                {step.node.timing && <span className="text-[10px] text-slate-500 font-mono ml-auto">{step.node.timing}</span>}
-              </div>
-            </button>
-            {i < DB_STEPS.length - 1 && (
-              <div className="flex flex-col items-center py-0.5">
-                <div className="w-0.5 h-3 bg-slate-700" />
-                <div className="w-0 h-0 border-l-3 border-r-3 border-t-3 border-transparent border-t-slate-600" />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      <DetailPanel
-        node={selectedNode !== null ? DB_STEPS[selectedNode].node : null}
-        visible={selectedNode !== null}
-      />
-      <LogPanel logs={logs} />
-    </div>
-  );
-}
-
-// ─── WebSocket Flow ──────────────────────────────────────────────────
-
-function WebSocketFlow({
-  currentStep,
-  completedSteps,
-  logs,
-  flyingMessages,
-}: {
-  currentStep: number;
-  completedSteps: Set<number>;
-  logs: LogEntry[];
-  flyingMessages: { id: number; from: string; to: string }[];
-}) {
-  return (
-    <div className="space-y-4">
-      {/* Hub-and-spoke layout */}
-      <div className="relative flex flex-col items-center gap-6 py-4">
-        {/* Top row: Client A */}
-        <div className="flex justify-center">
-          <SimNodeBox
-            node={WS_NODES[0]}
-            active={currentStep === 0}
-            completed={completedSteps.has(0)}
-            showTiming={false}
-          />
-        </div>
-
-        {/* Arrow from Client A to Server */}
-        <div className="flex flex-col items-center">
-          <div className="relative w-0.5 h-6 bg-slate-700">
-            {(currentStep === 0 || completedSteps.has(0)) && currentStep <= 1 && (
-              <div
-                className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-teal-400 shadow-lg shadow-teal-400/50"
-                style={{ animation: 'sim-moveDot 0.6s ease-in-out forwards' }}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Server */}
-        <div className="flex justify-center">
-          <SimNodeBox
-            node={WS_NODES[1]}
-            active={currentStep === 1}
-            completed={completedSteps.has(1)}
-          />
-        </div>
-
-        {/* Arrows from Server to clients B, C, D */}
-        <div className="flex flex-col items-center">
-          <div className="relative w-0.5 h-4 bg-slate-700">
-            {currentStep >= 2 && (
-              <div
-                className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50"
-                style={{ animation: 'sim-moveDot 0.5s ease-in-out forwards' }}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Client row */}
-        <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8">
-          {[WS_NODES[2], WS_NODES[3], WS_NODES[4]].map((node, i) => {
-            const stepIdx = i + 2;
-            return (
-              <SimNodeBox
-                key={node.id}
-                node={node}
-                active={currentStep === stepIdx}
-                completed={completedSteps.has(stepIdx)}
-              />
-            );
-          })}
-        </div>
-
-        {/* Flying message bubbles */}
-        {flyingMessages.map((msg) => (
-          <div
-            key={msg.id}
-            className="absolute pointer-events-none"
-            style={{
-              top: msg.from === 'client-a' ? '10%' : '45%',
-              left: msg.to === 'client-b' ? '15%' : msg.to === 'client-c' ? '50%' : msg.to === 'client-d' ? '80%' : '50%',
-              animation: msg.from === 'client-a'
-                ? 'sim-flyDown 0.8s ease-in-out forwards'
-                : msg.to === 'client-b'
-                  ? 'sim-flyDiagonalBL 0.6s ease-in-out forwards'
-                  : msg.to === 'client-c'
-                    ? 'sim-flyDown 0.6s ease-in-out forwards'
-                    : 'sim-flyDiagonalBR 0.6s ease-in-out forwards',
-              '--fly-distance': '60px',
-              '--fly-x': msg.to === 'client-b' ? '-80px' : msg.to === 'client-d' ? '80px' : '0px',
-              '--fly-y': '60px',
-            } as React.CSSProperties}
-          >
-            <div className="px-2 py-1 rounded-full bg-teal-500/20 border border-teal-500/30 text-teal-300 text-[10px] font-mono whitespace-nowrap shadow-lg">
-              &quot;Hello!&quot;
-            </div>
-          </div>
-        ))}
-      </div>
-      <LogPanel logs={logs} />
-    </div>
-  );
-}
-
-// ─── Middleware Chain ─────────────────────────────────────────────────
-
-function MiddlewareChain({
-  currentStep,
-  completedSteps,
-  logs,
-  rejectedAt,
-  showRejectOptions,
-  onReject,
-}: {
-  currentStep: number;
-  completedSteps: Set<number>;
-  logs: LogEntry[];
-  rejectedAt: number | null;
-  showRejectOptions: boolean;
-  onReject: (step: number) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      {/* Desktop: horizontal */}
-      <div className="hidden md:flex flex-wrap items-center justify-center gap-1">
-        {MW_STEPS.map((step, i) => {
-          const isRejected = rejectedAt === i;
-          const isAfterRejection = rejectedAt !== null && i > rejectedAt;
-          return (
-            <div key={step.node.id} className="flex items-center">
-              <div className="relative">
-                <SimNodeBox
-                  node={step.node}
-                  active={currentStep === i && !isAfterRejection}
-                  completed={completedSteps.has(i) && !isRejected}
-                  rejected={isRejected}
-                />
-                {showRejectOptions && step.node.canReject && !isAfterRejection && rejectedAt === null && (
-                  <button
-                    onClick={() => onReject(i)}
-                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500/20 border border-red-500/30
-                      flex items-center justify-center text-red-400 hover:bg-red-500/40 transition-all
-                      focus:outline-none focus:ring-2 focus:ring-red-500/40"
-                    style={{ animation: 'sim-appear 0.2s ease-out' }}
-                    aria-label={`Reject at ${step.node.label}`}
-                    title={`Reject: ${step.node.rejectReason || 'Rejected'}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-              {i < MW_STEPS.length - 1 && !isAfterRejection && (
-                <AnimatedArrow active={currentStep === i} index={i} />
-              )}
+              <span
+                className={`shrink-0 px-1.5 py-0.5 rounded border font-mono text-[10px] ${cfg.badge} ${cfg.color}`}
+              >
+                {log.type.toUpperCase()}
+              </span>
+              <span className="text-slate-300 font-mono text-[11px] leading-snug">{log.message}</span>
+              <span className="text-slate-600 ml-auto shrink-0 text-[10px]">
+                #{log.step + 1}
+              </span>
             </div>
           );
         })}
       </div>
-
-      {/* Mobile: vertical */}
-      <div className="md:hidden flex flex-col items-center gap-1 max-w-sm mx-auto">
-        {MW_STEPS.map((step, i) => {
-          const isRejected = rejectedAt === i;
-          const isAfterRejection = rejectedAt !== null && i > rejectedAt;
-          return (
-            <div key={step.node.id} className="flex flex-col items-center gap-1 w-full">
-              <div className="relative w-full">
-                <div
-                  className={`w-full px-4 py-3 rounded-xl border transition-all text-center
-                    ${isRejected
-                      ? 'bg-red-500/15 border-red-500/40 text-red-400'
-                      : isAfterRejection
-                        ? 'bg-slate-800/40 border-slate-700/30 text-slate-600 opacity-50'
-                        : currentStep === i
-                          ? 'bg-teal-500/15 border-teal-500/40 text-teal-300'
-                          : completedSteps.has(i)
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                            : 'bg-slate-800/80 border-slate-700/50 text-slate-500'
-                    }
-                  `}
-                  style={{
-                    animation: currentStep === i && !isAfterRejection
-                      ? 'sim-pulseGlow 1.5s ease-in-out infinite'
-                      : isRejected
-                        ? 'sim-rejectFlash 0.5s ease-in-out'
-                        : undefined,
-                  }}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    <span className={isRejected ? 'text-red-400' : currentStep === i && !isAfterRejection ? 'text-teal-400' : completedSteps.has(i) ? 'text-emerald-400' : 'text-slate-600'}>
-                      {step.node.icon}
-                    </span>
-                    <span className="text-sm font-semibold">{step.node.label}</span>
-                    {isRejected && <X className="h-4 w-4 text-red-400 ml-1" />}
-                  </div>
-                </div>
-                {showRejectOptions && step.node.canReject && !isAfterRejection && rejectedAt === null && (
-                  <button
-                    onClick={() => onReject(i)}
-                    className="absolute top-1 right-2 px-2 py-0.5 rounded text-[10px] font-semibold
-                      bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/40 transition-all"
-                    style={{ animation: 'sim-appear 0.2s ease-out' }}
-                  >
-                    Reject
-                  </button>
-                )}
-              </div>
-              {i < MW_STEPS.length - 1 && !isAfterRejection && (
-                <div className="flex flex-col items-center py-0.5">
-                  <div className={`w-0.5 h-3 ${isRejected || (rejectedAt !== null && i >= rejectedAt) ? 'bg-red-500/30' : 'bg-slate-700'}`} />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Error response panel when rejected */}
-      {rejectedAt !== null && (
-        <div
-          className="p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-xs text-red-300"
-          style={{ animation: 'sim-slideIn 0.3s ease-out' }}
-        >
-          <div className="font-semibold text-red-400 mb-1 flex items-center gap-1.5">
-            <X className="h-4 w-4" />
-            Request Rejected at {MW_STEPS[rejectedAt].node.label}
-          </div>
-          <p className="text-slate-400">{MW_STEPS[rejectedAt].node.rejectReason || 'Request denied'}. The request was short-circuited and an error response was returned to the client.</p>
-        </div>
-      )}
-
-      <LogPanel logs={logs} />
     </div>
   );
 }
 
 // ─── Main SimulationEngine Component ─────────────────────────────────
 
-export function SimulationEngine({ simulation }: { simulation: SimulationType }) {
-  const [isPlaying, setIsPlaying] = useState(false);
+export default function SimulationEngine({ simulationType }: { simulationType: SimulationType }) {
   const [currentStep, setCurrentStep] = useState(-1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [completed, setCompleted] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<number | null>(null);
-  const [rejectedAt, setRejectedAt] = useState<number | null>(null);
-  const [flyingMessages, setFlyingMessages] = useState<{ id: number; from: string; to: string }[]>([]);
+  const [isComplete, setIsComplete] = useState(false);
   const logIdRef = useRef(0);
-  const msgIdRef = useRef(0);
 
-  // Get config for current simulation type
-  const getConfig = useCallback((): { steps: SimStep[]; stepDelay: number } => {
-    switch (simulation) {
-      case 'HTTP_REQUEST_FLOW':
-        return { steps: HTTP_NODES, stepDelay: 1200 };
-      case 'JWT_LIFECYCLE':
-        return { steps: JWT_STEPS, stepDelay: 1000 };
-      case 'DATABASE_QUERY':
-        return { steps: DB_STEPS, stepDelay: 900 };
-      case 'WEBSOCKET_FLOW':
-        return { steps: WS_LOG_STEPS, stepDelay: 1000 };
-      case 'MIDDLEWARE_CHAIN':
-        return { steps: MW_STEPS, stepDelay: 1100 };
-      default:
-        return { steps: [], stepDelay: 1000 };
-    }
-  }, [simulation]);
+  const config = SIMULATION_CONFIGS[simulationType];
+  const { steps, stepDelay } = config;
 
-  // Add log entry
-  const addLog = useCallback((step: SimStep, stepIndex: number) => {
+  // Add a log entry for a step
+  const addLog = useCallback((stepIndex: number) => {
+    const step = steps[stepIndex];
+    if (!step) return;
+
     logIdRef.current += 1;
+    const isDenied = step.id === 'access-denied';
     const entry: LogEntry = {
       id: logIdRef.current,
-      timestamp: step.node.timing ? parseInt(step.node.timing) || (stepIndex + 1) * 100 : (stepIndex + 1) * 100,
-      message: step.logMessage,
-      type: step.logType,
+      step: stepIndex,
+      message: `[${step.label}] ${step.description}`,
+      type: isDenied ? 'error' : stepIndex === steps.length - 1 ? 'success' : 'info',
     };
     setLogs((prev) => [...prev, entry]);
-  }, []);
+  }, [steps]);
 
-  // Handle WebSocket flying messages
+  // Auto-advance with setInterval
   useEffect(() => {
-    if (simulation !== 'WEBSOCKET_FLOW' || !isPlaying) return;
+    if (!isPlaying || isPaused || isComplete) return;
 
-    if (currentStep === 0) {
-      // Client A sends message
-      msgIdRef.current += 1;
-      setFlyingMessages((prev) => [...prev, { id: msgIdRef.current, from: 'client-a', to: 'server' }]);
-      const timer = setTimeout(() => setFlyingMessages([]), 1000);
-      return () => clearTimeout(timer);
-    }
-    if (currentStep === 2) {
-      // Server broadcasts to all clients
-      const targets = ['client-b', 'client-c', 'client-d'];
-      targets.forEach((target, i) => {
-        setTimeout(() => {
-          msgIdRef.current += 1;
-          setFlyingMessages((prev) => [...prev, { id: msgIdRef.current + i, from: 'server', to: target }]);
-        }, i * 200);
+    const interval = setInterval(() => {
+      setCurrentStep((prev) => {
+        const next = prev + 1;
+
+        if (next >= steps.length) {
+          // Mark last step complete
+          setCompletedSteps((prevSet) => new Set([...prevSet, prev]));
+          setIsPlaying(false);
+          setIsComplete(true);
+          return prev; // stay on last step
+        }
+
+        // Mark previous step complete
+        if (prev >= 0) {
+          setCompletedSteps((prevSet) => new Set([...prevSet, prev]));
+        }
+
+        addLog(next);
+        return next;
       });
-      const timer = setTimeout(() => setFlyingMessages([]), 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [currentStep, isPlaying, simulation]);
-
-  // Main animation loop
-  useEffect(() => {
-    if (!isPlaying || completed) return;
-
-    const { steps, stepDelay } = getConfig();
-    if (steps.length === 0) return;
-
-    // If we haven't started yet, start at step 0
-    if (currentStep === -1) {
-      const timer = setTimeout(() => {
-        setCurrentStep(0);
-        setCompletedSteps(new Set());
-        addLog(steps[0], 0);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-
-    // Check for middleware rejection — state is already updated in handleReject
-    if (simulation === 'MIDDLEWARE_CHAIN' && rejectedAt !== null) {
-      return;
-    }
-
-    // Move to next step
-    const timer = setTimeout(() => {
-      const nextStep = currentStep + 1;
-
-      if (nextStep >= steps.length) {
-        // Animation complete
-        setCompletedSteps((prev) => new Set([...prev, currentStep]));
-        setCurrentStep(-1);
-        setIsPlaying(false);
-        setCompleted(true);
-        return;
-      }
-
-      setCompletedSteps((prev) => new Set([...prev, currentStep]));
-      setCurrentStep(nextStep);
-      addLog(steps[nextStep], nextStep);
     }, stepDelay);
 
-    return () => clearTimeout(timer);
-  }, [isPlaying, currentStep, completed, simulation, rejectedAt, getConfig, addLog]);
+    return () => clearInterval(interval);
+  }, [isPlaying, isPaused, isComplete, steps.length, stepDelay, addLog]);
 
-  // Reset
+  // Start the first step when play begins — use timeout to avoid synchronous setState in effect
+  useEffect(() => {
+    if (isPlaying && !isPaused && currentStep === -1) {
+      const t = requestAnimationFrame(() => {
+        setCurrentStep(0);
+        addLog(0);
+      });
+      return () => cancelAnimationFrame(t);
+    }
+  }, [isPlaying, isPaused, currentStep, addLog]);
+
+  const handlePlay = useCallback(() => {
+    if (isComplete) {
+      // Reset and play again
+      setCurrentStep(-1);
+      setCompletedSteps(new Set());
+      setLogs([]);
+      setIsComplete(false);
+      logIdRef.current = 0;
+      // Will start on next render via the effect above
+      setTimeout(() => {
+        setIsPlaying(true);
+        setIsPaused(false);
+      }, 50);
+    } else {
+      setIsPlaying(true);
+      setIsPaused(false);
+    }
+  }, [isComplete]);
+
+  const handlePause = useCallback(() => {
+    setIsPaused(true);
+  }, []);
+
   const handleReset = useCallback(() => {
     setIsPlaying(false);
+    setIsPaused(false);
     setCurrentStep(-1);
     setCompletedSteps(new Set());
     setLogs([]);
-    setCompleted(false);
-    setSelectedNode(null);
-    setRejectedAt(null);
-    setFlyingMessages([]);
+    setIsComplete(false);
     logIdRef.current = 0;
-    msgIdRef.current = 0;
   }, []);
-
-  // Play
-  const handlePlay = useCallback(() => {
-    if (completed) {
-      handleReset();
-      setTimeout(() => setIsPlaying(true), 100);
-    } else {
-      setIsPlaying(true);
-    }
-  }, [completed, handleReset]);
-
-  // Pause
-  const handlePause = useCallback(() => {
-    setIsPlaying(false);
-  }, []);
-
-  // Handle middleware rejection
-  const handleReject = useCallback((stepIndex: number) => {
-    setIsPlaying(false);
-    setRejectedAt(stepIndex);
-    setCompletedSteps((prev) => new Set([...prev, stepIndex]));
-
-    const step = MW_STEPS[stepIndex];
-    logIdRef.current += 1;
-    setLogs((prev) => [
-      ...prev,
-      {
-        id: logIdRef.current,
-        timestamp: (stepIndex + 1) * 100,
-        message: `REJECTED at ${step.node.label}: ${step.node.rejectReason || 'Request denied'}`,
-        type: 'error' as const,
-      },
-    ]);
-    setCompleted(true);
-  }, []);
-
-  // Title for the simulation
-  const titles: Record<SimulationType, string> = {
-    HTTP_REQUEST_FLOW: 'HTTP Request Flow',
-    JWT_LIFECYCLE: 'JWT Lifecycle',
-    DATABASE_QUERY: 'Database Query Pipeline',
-    WEBSOCKET_FLOW: 'WebSocket Broadcast',
-    MIDDLEWARE_CHAIN: 'Middleware Chain',
-  };
-
-  // Descriptions for the simulation
-  const descriptions: Record<SimulationType, string> = {
-    HTTP_REQUEST_FLOW: 'Watch an HTTP request travel from the browser through DNS, load balancer, and API worker to the database.',
-    JWT_LIFECYCLE: 'Follow the complete lifecycle of a JWT token from creation to verification.',
-    DATABASE_QUERY: 'Trace a query from the FastAPI handler through the ORM, connection pool, and PostgreSQL to the final JSON response.',
-    WEBSOCKET_FLOW: 'See how a WebSocket server broadcasts messages from one client to all connected clients in real time.',
-    MIDDLEWARE_CHAIN: 'Watch a request pass through middleware layers — each one can reject it before it reaches the handler.',
-  };
 
   return (
-    <>
-      <style>{CSS_KEYFRAMES}</style>
-      <div className="rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 overflow-hidden">
-        {/* Header */}
-        <div className="px-4 sm:px-6 py-4 border-b border-slate-700/50 bg-slate-800/30">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h3 className="text-base sm:text-lg font-bold text-teal-400">{titles[simulation]}</h3>
-              <p className="text-xs text-slate-400 mt-0.5 max-w-lg">{descriptions[simulation]}</p>
-            </div>
-            <ControlBar
-              isPlaying={isPlaying}
-              onPlay={handlePlay}
-              onPause={handlePause}
-              onReset={handleReset}
-              completed={completed}
-            />
+    <div className="rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 overflow-hidden">
+      {/* Header */}
+      <div className="px-4 sm:px-6 py-4 border-b border-slate-700/50 bg-slate-800/30">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base sm:text-lg font-bold text-teal-400 truncate">
+              {config.title}
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">
+              {config.description}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Play / Pause */}
+            <button
+              onClick={isPlaying && !isPaused ? handlePause : handlePlay}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                bg-teal-500/10 text-teal-400 border border-teal-500/20 hover:bg-teal-500/20
+                focus:outline-none focus:ring-2 focus:ring-teal-500/40
+                active:scale-95"
+              aria-label={isPlaying && !isPaused ? 'Pause simulation' : 'Play simulation'}
+            >
+              {isPlaying && !isPaused ? (
+                <>
+                  <span className="text-base">⏸</span>
+                  <span>Pause</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-base">▶</span>
+                  <span>{isComplete ? 'Replay' : 'Play'}</span>
+                </>
+              )}
+            </button>
+            {/* Reset */}
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all
+                bg-slate-700/50 text-slate-300 border border-slate-600/50 hover:bg-slate-700
+                focus:outline-none focus:ring-2 focus:ring-slate-500/40
+                active:scale-95"
+              aria-label="Reset simulation"
+            >
+              <span className="text-base">↺</span>
+              <span>Reset</span>
+            </button>
           </div>
         </div>
-
-        {/* Simulation Area */}
-        <div className="px-4 sm:px-6 py-5">
-          {simulation === 'HTTP_REQUEST_FLOW' && (
-            <HttpRequestFlow
-              currentStep={currentStep}
-              completedSteps={completedSteps}
-              logs={logs}
-              selectedNode={selectedNode}
-              onSelectNode={setSelectedNode}
-            />
-          )}
-          {simulation === 'JWT_LIFECYCLE' && (
-            <JwtLifecycle
-              currentStep={currentStep}
-              completedSteps={completedSteps}
-              logs={logs}
-            />
-          )}
-          {simulation === 'DATABASE_QUERY' && (
-            <DatabaseQuery
-              currentStep={currentStep}
-              completedSteps={completedSteps}
-              logs={logs}
-              selectedNode={selectedNode}
-              onSelectNode={setSelectedNode}
-            />
-          )}
-          {simulation === 'WEBSOCKET_FLOW' && (
-            <WebSocketFlow
-              currentStep={currentStep}
-              completedSteps={completedSteps}
-              logs={logs}
-              flyingMessages={flyingMessages}
-            />
-          )}
-          {simulation === 'MIDDLEWARE_CHAIN' && (
-            <MiddlewareChain
-              currentStep={currentStep}
-              completedSteps={completedSteps}
-              logs={logs}
-              rejectedAt={rejectedAt}
-              showRejectOptions={isPlaying || completed}
-              onReject={handleReject}
-            />
-          )}
-        </div>
       </div>
-    </>
+
+      {/* Simulation Area */}
+      <div className="px-4 sm:px-6 py-5 space-y-5">
+        {/* SVG Flow Visualization */}
+        <div className="overflow-x-auto">
+          <FlowVisualization
+            steps={steps}
+            currentStep={currentStep}
+            completedSteps={completedSteps}
+            simulationType={simulationType}
+          />
+        </div>
+
+        {/* Step Indicator Bar */}
+        <StepIndicatorBar
+          steps={steps}
+          currentStep={currentStep}
+          completedSteps={completedSteps}
+        />
+
+        {/* Step Description */}
+        <StepDescription
+          steps={steps}
+          currentStep={currentStep}
+          completedSteps={completedSteps}
+        />
+
+        {/* Event Log */}
+        <EventLog logs={logs} />
+      </div>
+    </div>
   );
 }
+
+// Named export
+export { SimulationEngine };
