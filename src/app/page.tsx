@@ -11,11 +11,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { VisualizationBlock } from '@/components/visualizations';
+import { SimulationEngine } from '@/components/SimulationEngine';
+import { FrontendExample } from '@/components/FrontendExample';
 import {
   ChevronDown, ChevronRight, CheckCircle2, Circle, Code2, Copy, Check,
   Menu, BookOpen, Rocket, Trophy, Lightbulb, Terminal, Eye,
   FolderOpen, Zap, GraduationCap, Star, ArrowRight, Home,
-  AlertTriangle, KeyRound, BookMarked
+  AlertTriangle, KeyRound, BookMarked, MessageSquare, HelpCircle,
+  AlertCircle, Globe, Layers
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -164,6 +167,93 @@ function SectionBlock({ section, index }: { section: Section; index: number }) {
             </CardContent>
           </Card>
         )}
+
+        {section.realWorldAnalogy && (
+          <Card className="border-purple-500/30 bg-purple-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-purple-600 dark:text-purple-400">
+                <Globe className="h-4 w-4" /> Real-World Analogy
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-purple-700 dark:text-purple-300">{section.realWorldAnalogy}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {section.commonMistakes && section.commonMistakes.length > 0 && (
+          <Card className="border-red-500/30 bg-red-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-red-600 dark:text-red-400">
+                <AlertCircle className="h-4 w-4" /> Common Mistakes
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {section.commonMistakes.map((mistake, i) => (
+                <div key={i} className="text-sm">
+                  <p className="text-red-700 dark:text-red-300 font-medium">{mistake.mistake}</p>
+                  <p className="text-emerald-700 dark:text-emerald-300 mt-1">Fix: {mistake.fix}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {section.interviewQuestions && section.interviewQuestions.length > 0 && (
+          <Card className="border-indigo-500/30 bg-indigo-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                <HelpCircle className="h-4 w-4" /> Interview Questions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {section.interviewQuestions.map((q, i) => (
+                <div key={i} className="text-sm">
+                  <p className="text-indigo-700 dark:text-indigo-300 font-medium">Q: {q.question}</p>
+                  <p className="text-slate-600 dark:text-slate-400 mt-1">A: {q.answer}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {section.proTips && section.proTips.length > 0 && (
+          <Card className="border-cyan-500/30 bg-cyan-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-cyan-600 dark:text-cyan-400">
+                <Zap className="h-4 w-4" /> Pro Tips
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {section.proTips.map((tip, i) => (
+                <p key={i} className="text-sm text-cyan-700 dark:text-cyan-300 flex gap-2">
+                  <Star className="h-4 w-4 mt-0.5 shrink-0 text-cyan-500" />
+                  <span>{tip}</span>
+                </p>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {section.fullStackExample && (
+          <Card className="border-orange-500/30 bg-orange-500/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2 text-orange-600 dark:text-orange-400">
+                <Layers className="h-4 w-4" /> Full-Stack Example
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Backend (FastAPI)</p>
+                <CodeBlock example={section.fullStackExample.backend} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Frontend (HTML/JS)</p>
+                <CodeBlock example={section.fullStackExample.frontend} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
@@ -187,9 +277,19 @@ function TopicContent({ topic, isCompleted, onToggleComplete }: { topic: Topic; 
 
       <Separator />
 
+      {topic.simulation && (
+        <SimulationEngine simulation={topic.simulation} />
+      )}
+
       {topic.sections.map((section, i) => (
         <SectionBlock key={i} section={section} index={i} />
       ))}
+
+      {topic.frontendIntegration && (
+        <div className="mt-6">
+          <FrontendExample example={topic.frontendIntegration} />
+        </div>
+      )}
     </div>
   );
 }

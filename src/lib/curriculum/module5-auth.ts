@@ -14,6 +14,7 @@ export const module5Auth: Module = {
       id: 'm5-jwt-auth',
       title: 'JWT Authentication',
       icon: '🎫',
+      simulation: 'JWT_LIFECYCLE',
       introduction:
         'JSON Web Tokens (JWT) are the backbone of modern stateless authentication. They let your API verify a user\'s identity without storing session state on the server, making them ideal for microservices, SPAs, and mobile apps. In this topic you will learn how to create and verify JWTs, configure OAuth2PasswordBearer, and build a complete token-based authentication flow in FastAPI.',
       sections: [
@@ -126,7 +127,32 @@ async def read_users_me(current_user: dict = Depends(get_current_user)):
           ],
           keyTakeaway:
             'JWTs are signed, not encrypted — they prove identity via a cryptographic signature that your server verifies on every request.',
-        },
+        
+          realWorldAnalogy: `A JWT is like a hotel key card. When you check in (login), the front desk encodes your room number and expiration date onto the card (creates JWT). Each time you want to enter your room (make a request), you swipe the card (send the token). The door lock verifies the card signature and checks the expiration. If valid, you enter. If expired or tampered with, access is denied.`,
+          commonMistake: [
+            {
+              mistake: `Storing sensitive data like passwords inside JWT payloads`,
+              fix: `JWTs are base64-encoded, not encrypted. Anyone who intercepts the token can read its contents. Never put passwords, SSNs, or secrets inside the payload.`,
+            },
+            {
+              mistake: `Using a short, simple secret key`,
+              fix: `Use a long, randomly-generated secret key (32+ characters) stored in an environment variable. Short keys can be brute-forced.`,
+            },
+          ],
+          interviewQuestions: [
+            {
+              question: `What are the three parts of a JWT?`,
+              answer: `Header (algorithm and type), Payload (claims like sub and exp), and Signature (cryptographic proof using the secret key). They're separated by dots and base64-encoded.`,
+            },
+            {
+              question: `Can JWTs be encrypted?`,
+              answer: `Standard JWTs (JWS) are signed but not encrypted — the payload is readable by anyone. For encryption, use JWE (JSON Web Encryption). Most APIs use JWS because signing prevents tampering, which is the primary concern.`,
+            },
+          ],
+          proTips: [
+            `Always set an expiration (exp claim) on JWTs. Tokens without expiration never become invalid, which is a security risk if they're leaked.`,
+            `Use HS256 for symmetric signing (simplest) or RS256 for asymmetric (public/private key pair). RS256 is better for microservices where multiple services need to verify tokens.`,
+          ],},
         {
           heading: 'OAuth2PasswordBearer and Token Flow',
           content: `FastAPI provides \`OAuth2PasswordBearer\` as a security scheme that tells the framework two things: (1) where clients should go to obtain a token (the \`tokenUrl\`), and (2) that the client must send the token as a Bearer token in the Authorization header. When you use \`OAuth2PasswordBearer\` as a dependency, FastAPI automatically adds a lock icon to your Swagger UI documentation and an "Authorize" button that lets testers authenticate interactively.
@@ -210,7 +236,32 @@ async def protected_route(token: str = Depends(oauth2_scheme)):
           ],
           keyTakeaway:
             'OAuth2PasswordBearer extracts the token from the request header — your dependency function handles the actual verification logic.',
-        },
+        
+          realWorldAnalogy: `OAuth2PasswordBearer is like a coat check at a restaurant. You give your coat (credentials) to the attendant, who gives you a numbered ticket (token). Every time you want to check on your coat, you show the ticket instead of your coat. The attendant knows which coat belongs to which ticket number.`,
+          commonMistake: [
+            {
+              mistake: `Sending credentials as JSON instead of form-data to the token endpoint`,
+              fix: `OAuth2 requires application/x-www-form-urlencoded for the token endpoint. Use OAuth2PasswordRequestForm which automatically parses form-data.`,
+            },
+            {
+              mistake: `Forgetting to return token_type: "bearer" in the token response`,
+              fix: `The OAuth2 specification requires the token_type field. Without it, Swagger UI can't use the token for subsequent requests.`,
+            },
+          ],
+          interviewQuestions: [
+            {
+              question: `Why does OAuth2 require form-data instead of JSON for the token endpoint?`,
+              answer: `The OAuth2 specification (RFC 6749) mandates application/x-www-form-urlencoded for token requests. This is a historical decision from when OAuth2 was designed for browser-based flows.`,
+            },
+            {
+              question: `What does OAuth2PasswordBearer actually do?`,
+              answer: `It extracts the Bearer token from the Authorization header. It doesn't authenticate the user — that's your dependency function's job. It also adds the "Authorize" button to Swagger UI.`,
+            },
+          ],
+          proTips: [
+            `The tokenUrl parameter enables Swagger UI's Authorize button. Make sure it matches your actual login endpoint path.`,
+            `Use the Token Pydantic model to enforce the correct response shape: {access_token: str, token_type: str}.`,
+          ],},
         {
           heading: 'Token Refresh Strategy',
           content: `Short-lived access tokens are a security best practice, but they create a poor user experience if users must re-enter credentials every 15 minutes. The solution is a **refresh token** — a longer-lived, single-use token that the client exchanges for a new access token without requiring the user to log in again.
@@ -301,8 +352,103 @@ async def logout(refresh_token: str):
           ],
           keyTakeaway:
             'Refresh tokens give you the security of short-lived access tokens with the convenience of persistent sessions — always rotate them.',
-        },
+        
+          realWorldAnalogy: `Refresh tokens are like a season pass at an amusement park. Your daily wristband (access token) expires at closing time, but your season pass (refresh token) lets you get a new wristband each visit without buying a new ticket. If you lose your season pass, you must buy a new one (re-login).`,
+          commonMistake: [
+            {
+              mistake: `Storing refresh tokens in localStorage (vulnerable to XSS)`,
+              fix: `Store refresh tokens in HTTP-only, Secure cookies. localStorage is accessible to JavaScript, making it vulnerable to XSS attacks.`,
+            },
+            {
+              mistake: `Not implementing refresh token rotation`,
+              fix: `Issue a new refresh token every time one is used, and invalidate the old one. Without rotation, a stolen refresh token can be used indefinitely.`,
+            },
+          ],
+          interviewQuestions: [
+            {
+              question: `What is refresh token rotation?`,
+              answer: `Each time a refresh token is used, the server issues a new refresh token and invalidates the old one. This limits the window of opportunity if a refresh token is stolen — it can only be used once.`,
+            },
+            {
+              question: `Where should you store refresh tokens on the client?`,
+              answer: `In HTTP-only, Secure cookies. This protects against XSS (JavaScript can't read HTTP-only cookies) and ensures the cookie is only sent over HTTPS (Secure flag).`,
+            },
+          ],
+          proTips: [
+            `Implement refresh token rotation — issue a new refresh token on every use and invalidate the old one. This prevents replay attacks.`,
+            `Track active refresh tokens in your database so you can revoke them on logout or security incidents.`,
+          ],},
       ],
+      frontendIntegration: {
+        title: `JWT Authentication Frontend Flow`,
+        vanillaHtml: {
+          title: `Login & Protected API Access`,
+          description: `A complete login flow with JWT token storage and protected API calls`,
+          code: `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>JWT Auth Demo</title>
+<style>
+  body { font-family: system-ui; max-width: 600px; margin: 2rem auto; }
+  .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  input { padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; margin: 0.3rem 0; }
+  button { background: #0d9488; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; margin: 0.3rem; }
+  .logout { background: #ef4444; }
+  pre { background: #1e293b; color: #e2e8f0; padding: 0.75rem; border-radius: 6px; font-size: 0.8rem; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <h1>JWT Auth Demo</h1>
+  <div id="loginSection" class="card">
+    <h3>Login</h3>
+    <input id="username" placeholder="Username">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <div id="loginError"></div>
+  </div>
+  <div id="protectedSection" class="card hidden">
+    <h3>Protected Content</h3>
+    <button onclick="fetchProfile()">Get Profile</button>
+    <button onclick="logout()" class="logout">Logout</button>
+    <pre id="profile"></pre>
+  </div>
+  <script>
+    const API = "http://localhost:8000";
+    function getToken() { return localStorage.getItem("access_token"); }
+    function setToken(token) { localStorage.setItem("access_token", token); showProtected(); }
+    function removeToken() { localStorage.removeItem("access_token"); showLogin(); }
+    function showProtected() { document.getElementById("loginSection").classList.add("hidden"); document.getElementById("protectedSection").classList.remove("hidden"); }
+    function showLogin() { document.getElementById("loginSection").classList.remove("hidden"); document.getElementById("protectedSection").classList.add("hidden"); }
+    async function login() {
+      const formData = new URLSearchParams();
+      formData.append("username", document.getElementById("username").value);
+      formData.append("password", document.getElementById("password").value);
+      const res = await fetch(API + "/auth/token", { method: "POST", headers: {"Content-Type": "application/x-www-form-urlencoded"}, body: formData });
+      if (res.ok) { const data = await res.json(); setToken(data.access_token); }
+      else { document.getElementById("loginError").textContent = "Login failed!"; }
+    }
+    async function fetchProfile() {
+      const res = await fetch(API + "/users/me", { headers: {"Authorization": "Bearer " + getToken()} });
+      document.getElementById("profile").textContent = JSON.stringify(await res.json(), null, 2);
+    }
+    function logout() { removeToken(); }
+    if (getToken()) showProtected(); else showLogin();
+  </script>
+</body>
+</html>`,
+          language: `html`,
+          whatHappened: [
+            `Login sends form-data to /auth/token and stores the JWT`,
+            `Protected requests include Authorization: Bearer <token> header`,
+            `Logout removes the token from localStorage`,
+          ],
+          tryToBreak: [
+            `Manually corrupt the token in localStorage — API returns 401`,
+            `Try accessing /users/me without logging in — 401 Unauthorized`,
+          ],
+        },
+        corsNote: `The login request uses form-data (application/x-www-form-urlencoded). Ensure CORS allows this Content-Type.`,
+      },
     },
 
     // ──────────────────────────────────────────────
@@ -445,7 +591,32 @@ async def read_own_items(current_user: dict = Depends(get_current_user)):
             'Always return the correct response shape: {"access_token": "...", "token_type": "bearer"} — Swagger UI expects this exact format.',
           ],
           keyTakeaway:
-            'OAuth2PasswordRequestForm parses form-data credentials — it makes Swagger UI\'s Authorize button work automatically.',
+            'OAuth2PasswordRequestForm parses form-data credentials — it makes Swagger UI\'
+          realWorldAnalogy: `OAuth2PasswordRequestForm is like a standardized job application form. Every company uses the same format — name, address, phone number — so applicants know exactly what to fill in. The OAuth2 spec standardizes the token request format so every OAuth2 client knows how to send credentials.`,
+          commonMistake: [
+            {
+              mistake: `Creating a custom login endpoint that accepts JSON instead of using OAuth2PasswordRequestForm`,
+              fix: `Use OAuth2PasswordRequestForm as a dependency. It handles form-data parsing and makes Swagger UI's Authorize button work automatically.`,
+            },
+            {
+              mistake: `Not adding the WWW-Authenticate: Bearer header to 401 responses`,
+              fix: `Always include headers={"WWW-Authenticate": "Bearer"} in your 401 HTTPException. This tells the client to use Bearer token authentication.`,
+            },
+          ],
+          interviewQuestions: [
+            {
+              question: `What is the difference between OAuth2PasswordRequestForm and OAuth2PasswordRequestFormStrict?`,
+              answer: `The strict variant requires the grant_type field to be "password", which the OAuth2 spec mandates but many implementations skip. Use strict for full compliance.`,
+            },
+            {
+              question: `Why does Swagger UI's Authorize button work with OAuth2PasswordBearer?`,
+              answer: `FastAPI generates an OpenAPI security definition from your OAuth2PasswordBearer instance. Swagger UI reads this definition and creates the Authorize UI automatically.`,
+            },
+          ],
+          proTips: [
+            `The OAuth2PasswordRequestForm makes Swagger UI's Authorize button work out of the box — always use it for token endpoints.`,
+            `Return the correct response shape: {"access_token": "...", "token_type": "bearer"}. Swagger UI expects this exact format.`,
+          ],s Authorize button work automatically.',
         },
         {
           heading: 'Swagger Authorize Button Integration',
@@ -526,7 +697,32 @@ async def list_items():
           ],
           keyTakeaway:
             'OAuth2PasswordBearer with scopes gives you a fully interactive Swagger UI auth experience — users can log in and test protected endpoints without Postman.',
-        },
+        
+          realWorldAnalogy: `The Swagger Authorize button is like a VIP entrance to a club. Instead of fumbling with ID at the door every time, you show your VIP card once at the entrance (click Authorize), and then you can enter any room (endpoint) in the club without showing ID again.`,
+          commonMistake: [
+            {
+              mistake: `Not adding scopes to the OAuth2PasswordBearer configuration`,
+              fix: `Define scopes in OAuth2PasswordBearer(scopes={...}) so they appear in Swagger UI's Authorize dialog. Scopes enable fine-grained permissions like read:items, write:items.`,
+            },
+            {
+              mistake: `Using Depends() instead of Security() for security dependencies`,
+              fix: `Use Security(get_current_user, scopes=["read:items"]) instead of Depends(get_current_user). Security() enables the scope-checking feature in FastAPI.`,
+            },
+          ],
+          interviewQuestions: [
+            {
+              question: `What are OAuth2 scopes and how do they work in FastAPI?`,
+              answer: `Scopes are fine-grained permissions like "read:items" or "admin:all". Define them in OAuth2PasswordBearer, include them in the JWT, and check them using SecurityScopes in your dependency.`,
+            },
+            {
+              question: `How do you require a specific scope for an endpoint?`,
+              answer: `Use Security(get_current_user, scopes=["read:items"]) as a dependency. FastAPI checks that the token includes the required scope and returns 403 if it doesn't.`,
+            },
+          ],
+          proTips: [
+            `Add meaningful descriptions to your scopes — they appear as tooltips in the Swagger UI Authorize dialog.`,
+            `Use Security() instead of Depends() for security dependencies. It enables scope checking and marks the dependency as a security scheme in OpenAPI.`,
+          ],},
       ],
     },
 
@@ -647,7 +843,32 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
             'The deprecated="auto" setting in CryptContext automatically upgrades hashes to the latest scheme when a user logs in.',
           ],
           keyTakeaway:
-            'Always hash passwords with bcrypt via passlib — it\'s deliberately slow to compute, making brute-force attacks impractical.',
+            'Always hash passwords with bcrypt via passlib — it\'
+          realWorldAnalogy: `Password hashing is like a meat grinder — you can turn a steak into ground beef in seconds, but you can never turn ground beef back into a steak. When a user registers, you grind their password (hash it) and store the ground beef. When they login, you grind the submitted password and compare it to the stored ground beef. If they match, the password is correct.`,
+          commonMistake: [
+            {
+              mistake: `Using SHA-256 or MD5 for password hashing`,
+              fix: `Use bcrypt via passlib. SHA-256 and MD5 are designed to be fast (bad for passwords). Bcrypt is deliberately slow, making brute-force attacks impractical.`,
+            },
+            {
+              mistake: `Not salting passwords`,
+              fix: `Bcrypt automatically generates a unique salt for each hash. Never implement your own salting — use passlib's built-in salt generation.`,
+            },
+          ],
+          interviewQuestions: [
+            {
+              question: `Why is bcrypt better than SHA-256 for passwords?`,
+              answer: `Bcrypt is deliberately slow (adjustable cost factor), making brute-force attacks computationally expensive. SHA-256 is designed to be fast, which is great for data integrity but terrible for passwords.`,
+            },
+            {
+              question: `What is the cost factor in bcrypt?`,
+              answer: `The cost factor determines how many iterations to run. Each increment doubles computation time. Cost 12 takes ~250ms per hash — fast for single logins but slow enough to make cracking infeasible.`,
+            },
+          ],
+          proTips: [
+            `Use bcrypt__rounds=12 as a good balance between security and performance. Each increment doubles computation time.`,
+            `Set deprecated="auto" in CryptContext to automatically upgrade hashes when users log in. This enables lazy migration from old hash algorithms.`,
+          ],s deliberately slow to compute, making brute-force attacks impractical.',
         },
         {
           heading: 'Security Best Practices for Password Handling',
@@ -754,8 +975,89 @@ def authenticate_user(username: str, password: str) -> dict | None:
           ],
           keyTakeaway:
             'Password security is a defense-in-depth practice: strong hashing, strong passwords, no logging, and gradual migration.',
-        },
+        
+          realWorldAnalogy: `Password validation is like airport security for your application. You check that the passport photo matches (strength validation), you don't let people take photos of the security checkpoint (no logging), and you gradually upgrade the metal detectors (lazy hash migration) without shutting down the airport.`,
+          commonMistake: [
+            {
+              mistake: `Logging passwords during registration or login for debugging`,
+              fix: `Never log passwords or hashes. Log only whether authentication succeeded or failed. Structured logging should explicitly exclude sensitive fields.`,
+            },
+            {
+              mistake: `Not rate-limiting login attempts`,
+              fix: `Password hashing alone isn't enough — limit login attempts per IP to 5-10 per minute. Without rate limiting, an attacker can try millions of password combinations.`,
+            },
+          ],
+          interviewQuestions: [
+            {
+              question: `What is lazy password hash migration?`,
+              answer: `When upgrading hash algorithms, you can't re-hash existing passwords (you don't have the plaintext). Instead, when a user with a deprecated hash logs in, verify against the old hash and immediately re-hash with the new algorithm. This gradually migrates all users over time.`,
+            },
+            {
+              question: `How do you validate password strength in FastAPI?`,
+              answer: `Use a Pydantic field_validator on the password field that checks minimum length, character types, and common patterns. Return 422 with specific feedback if the password is weak.`,
+            },
+          ],
+          proTips: [
+            `Use zxcvbn-python for realistic password strength estimation instead of simple character-type checks. It detects common patterns like "Password123".`,
+            `Implement lazy migration: when a user with a deprecated hash logs in, verify against the old hash and immediately re-hash with bcrypt. This gradually migrates all users without forcing password resets.`,
+          ],},
       ],
+      frontendIntegration: {
+        title: `Registration & Login with Secure Passwords`,
+        vanillaHtml: {
+          title: `User Registration with Password Strength Validation`,
+          description: `A registration form that demonstrates secure password handling`,
+          code: `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Secure Registration</title>
+<style>
+  body { font-family: system-ui; max-width: 500px; margin: 2rem auto; }
+  input { padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; margin: 0.3rem 0; }
+  button { background: #0d9488; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; margin-top: 0.5rem; }
+  .weak { color: #dc2626; } .medium { color: #f59e0b; } .strong { color: #059669; }
+</style>
+</head>
+<body>
+  <h1>Register</h1>
+  <input id="username" placeholder="Username">
+  <input id="email" type="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password" oninput="checkStrength()">
+  <div id="strength" class="weak">Enter a password</div>
+  <input id="confirm" type="password" placeholder="Confirm Password">
+  <button onclick="register()">Register</button>
+  <div id="result"></div>
+  <script>
+    function checkStrength() {
+      const pw = document.getElementById("password").value;
+      const el = document.getElementById("strength");
+      if (pw.length < 8) { el.className = "weak"; el.textContent = "Too short (min 8 chars)"; }
+      else if (!/[A-Z]/.test(pw) || !/[0-9]/.test(pw)) { el.className = "medium"; el.textContent = "Add uppercase + number"; }
+      else { el.className = "strong"; el.textContent = "Strong!"; }
+    }
+    async function register() {
+      const pw = document.getElementById("password").value;
+      const confirm = document.getElementById("confirm").value;
+      if (pw !== confirm) { document.getElementById("result").textContent = "Passwords don't match!"; return; }
+      const res = await fetch("http://localhost:8000/register", { method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ username: document.getElementById("username").value, email: document.getElementById("email").value, password: pw }) });
+      document.getElementById("result").textContent = res.ok ? "Registered successfully!" : "Registration failed: " + (await res.json()).detail;
+    }
+  </script>
+</body>
+</html>`,
+          language: `html`,
+          whatHappened: [
+            `Password strength is checked client-side for UX`,
+            `The backend validates with Pydantic field_validator`,
+            `Passwords are hashed with bcrypt before storage`,
+          ],
+          tryToBreak: [
+            `Use a weak password like "123" — both client and server reject it`,
+            `Use mismatched confirm password — client-side check catches it`,
+          ],
+        },
+        corsNote: `Registration uses POST with JSON. Enable CORS on your FastAPI app.`,
+      },
     },
 
     // ──────────────────────────────────────────────
